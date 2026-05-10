@@ -192,6 +192,11 @@ impl BtrfsManager {
     pub fn get_groups_mut(&mut self) -> &mut Vec<Group> {
         &mut self.app_config.groups
     }
+
+    #[inline]
+    pub fn get_subvolumes(&self) -> &[PathBuf] {
+        &self.subvolumes
+    }
 }
 
 impl Drop for BtrfsManager {

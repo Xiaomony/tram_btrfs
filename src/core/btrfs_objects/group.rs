@@ -147,6 +147,11 @@ impl Group {
     }
 
     #[inline]
+    pub fn get_subvolumes(&self) -> &[PathBuf] {
+        &self.subvolumes
+    }
+
+    #[inline]
     pub fn get_snapshots(&self) -> &Vec<GroupSnapshot> {
         &self.snapshots
     }

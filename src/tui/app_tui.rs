@@ -2,19 +2,19 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, HorizontalAlignment, Layout, Rect},
-    style::Modifier,
-    widgets::{Block, BorderType, Borders, Clear, List, ListState, Paragraph},
+    style::{Color, Modifier},
+    widgets::{Block, BorderType, Borders, Clear, List, ListState, Padding, Paragraph},
 };
 use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
 
-use crate::globals;
 use crate::tui::menu::Menu;
 use crate::tui::snapshots_ui::SnapshotsUI;
 use crate::{
     core::{btrfs_manager::BtrfsManager, btrfs_objects::group::Group, error::CResult},
     tui::subvolumes_ui::SubvolumesUI,
 };
+use crate::{globals, tui::groups_ui::GroupsUI};
 
 #[derive(PartialEq)]
 enum AppFocus {
@@ -54,6 +54,7 @@ pub enum AppEvent {
 pub struct AppTUI {
     snapshots_ui: SnapshotsUI,
     subvolumes_ui: SubvolumesUI,
+    groups_ui: GroupsUI,
     menu_state: ListState,
     _btrfs_mgr: Rc<RefCell<BtrfsManager>>,
     /// the index of current selected snapshot group
@@ -67,6 +68,7 @@ impl AppTUI {
         Self {
             snapshots_ui: SnapshotsUI::new(btrfs_mgr.clone(), selected_group.clone()),
             subvolumes_ui: SubvolumesUI::new(btrfs_mgr.clone()),
+            groups_ui: GroupsUI::new(btrfs_mgr.clone(), selected_group.clone()),
             menu_state: ListState::default().with_selected(Some(0)),
             _btrfs_mgr: btrfs_mgr,
             _selected_group: selected_group,
@@ -85,10 +87,8 @@ impl AppTUI {
             .border_type(BorderType::Rounded)
             .title(" 󰍜 Menu ")
             .title_alignment(HorizontalAlignment::Center);
-        // let highlight_style = Style::default().fg(Color::Black).bg(highlight_color);
         let list = List::new(globals::MENU_ITEMS)
             .style(main_color)
-            // .highlight_style(highlight_style)
             .highlight_style(Modifier::REVERSED)
             .block(menu_block);
         frame.render_stateful_widget(list, area, &mut self.menu_state);
@@ -111,7 +111,7 @@ impl AppTUI {
             Snapshots => self
                 .snapshots_ui
                 .render(frame, horizontal_layout[1], focused),
-            Groups => (),
+            Groups => self.groups_ui.render(frame, horizontal_layout[1], focused),
             Subvolumes => self
                 .subvolumes_ui
                 .render(frame, horizontal_layout[1], focused),
@@ -166,8 +166,8 @@ impl AppTUI {
                     use crate::tui::menu::Menu::*;
                     if match self.get_crr_menu_item() {
                         Snapshots => self.snapshots_ui.handle_events(app_event)?,
-                        Groups => false,
-                        Subvolumes => false,
+                        Groups => self.groups_ui.handle_events(app_event)?,
+                        Subvolumes => self.subvolumes_ui.handle_events(app_event)?,
                         BrokenSnapshots => false,
                         Settings => false,
                     } {
@@ -250,12 +250,17 @@ pub fn show_confirm_popup(
     let confirm_block = Block::bordered()
         .border_type(BorderType::Rounded)
         .style(globals::FOCUSED_COLOR)
+        .padding(Padding::new(2, 2, 1, 0))
         .title(title.into())
         .title_alignment(Alignment::Center);
 
-    let [content_area, yesno_area] = confirm_block.inner(centered_area).layout(
-        &Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).horizontal_margin(2),
-    );
+    let [content_area, yesno_area] =
+        confirm_block
+            .inner(centered_area)
+            .layout(&Layout::vertical([
+                Constraint::Fill(1),
+                Constraint::Length(1),
+            ]));
     let [yes_area, no_area] = yesno_area.layout(&Layout::horizontal([
         Constraint::Percentage(50),
         Constraint::Percentage(50),
@@ -275,4 +280,13 @@ pub fn show_confirm_popup(
         yes_area,
     );
     frame.render_widget(Paragraph::new("(N)o").centered(), no_area);
+}
+
+#[inline]
+pub fn get_body_color(focused: bool) -> Color {
+    if focused {
+        globals::FOCUSED_COLOR
+    } else {
+        globals::BODY_COLOR
+    }
 }

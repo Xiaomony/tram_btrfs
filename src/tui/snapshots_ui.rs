@@ -1,14 +1,18 @@
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, HorizontalAlignment, Layout, Rect},
-    style::{Color, Modifier, Style},
-    widgets::{Block, BorderType, Paragraph, Row, Table, TableState},
+    style::{Color, Modifier, Style, Stylize},
+    text::Line,
+    widgets::{Block, BorderType, Padding, Paragraph, Row, Table, TableState},
 };
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     core::error::CResult,
-    tui::app_tui::{self, AppEvent, get_sel_group, get_sel_group_mut},
+    tui::{
+        app_tui::{self, AppEvent, get_sel_group, get_sel_group_mut},
+        menu::Menu,
+    },
 };
 use crate::{
     core::{btrfs_manager::BtrfsManager, btrfs_objects::snapshot_type::SnapshotType},
@@ -83,8 +87,20 @@ impl SnapshotsUI {
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         if self.no_valid_group {
-            // TODO: no valid groups
-            todo!()
+            let lines: Vec<Line<'static>> = vec![
+                Menu::Snapshots
+                    .as_ref()
+                    .bold()
+                    .italic()
+                    .patch_style(globals::BODY_COLOR)
+                    .into(),
+                "No groups. Please create one.".into(),
+            ];
+            frame.render_widget(
+                Paragraph::new(lines).alignment(Alignment::Center),
+                area.centered_vertically(Constraint::Length(2)),
+            );
+            return;
         }
         let manual_snapshot_rows: Vec<Row<'_>> = self
             .manual_snapshot_infos
@@ -161,6 +177,7 @@ impl SnapshotsUI {
             .border_type(BorderType::Rounded)
             .style(main_color)
             .title(" Manual Snapshots ")
+            .padding(Padding::uniform(1))
             .title_alignment(HorizontalAlignment::Center);
         if rows.is_empty() {
             frame.render_widget(
@@ -209,6 +226,7 @@ impl SnapshotsUI {
         let scheduled_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .style(main_color)
+            .padding(Padding::uniform(1))
             .title(" Scheduled Snapshots ")
             .title_alignment(HorizontalAlignment::Center);
         if rows.is_empty() {
@@ -221,7 +239,9 @@ impl SnapshotsUI {
             );
         } else {
             let header = Row::new(["Date", "Time", "Type", "Contained Subvolumes"])
-                .style(Style::new().bold().italic().underlined());
+                .bold()
+                .italic()
+                .underlined();
             let widths = [
                 Constraint::Percentage(20),
                 Constraint::Percentage(20),
