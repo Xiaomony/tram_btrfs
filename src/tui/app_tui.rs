@@ -2,7 +2,8 @@ use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, HorizontalAlignment, Layout, Rect},
-    style::{Color, Modifier},
+    style::{Color, Modifier, Styled},
+    text::Line,
     widgets::{Block, BorderType, Borders, Clear, List, ListState, Padding, Paragraph},
 };
 use std::cell::{Ref, RefCell, RefMut};
@@ -86,12 +87,30 @@ impl AppTUI {
         let menu_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .title(" 󰍜 Menu ")
-            .title_alignment(HorizontalAlignment::Center);
+            .title_alignment(HorizontalAlignment::Center)
+            .style(main_color);
+
         let list = List::new(globals::MENU_ITEMS)
             .style(main_color)
-            .highlight_style(Modifier::REVERSED)
-            .block(menu_block);
-        frame.render_stateful_widget(list, area, &mut self.menu_state);
+            .highlight_style(Modifier::REVERSED);
+
+        if let Some(crr_group) = get_sel_group(&self._btrfs_mgr, &self._selected_group) {
+            let vert_layout = Layout::vertical([Constraint::Fill(1), Constraint::Length(2)])
+                .split(menu_block.inner(area));
+            let crr_group_prompt = Paragraph::new(vec![
+                "Current Selected Group:\n".into(),
+                crr_group
+                    .get_name()
+                    .set_style(globals::WARNING_COLOR)
+                    .into(),
+            ])
+            .alignment(Alignment::Center);
+            frame.render_widget(menu_block, area);
+            frame.render_stateful_widget(list, vert_layout[0], &mut self.menu_state);
+            frame.render_widget(crr_group_prompt, vert_layout[1]);
+        } else {
+            frame.render_stateful_widget(list.block(menu_block), area, &mut self.menu_state);
+        }
     }
 
     pub fn render(&mut self, frame: &mut Frame) {
@@ -189,6 +208,15 @@ impl AppTUI {
             Downward | Bottom => self.menu_state.select_last(),
             Right | Enter | WindowRight => self.focus = AppFocus::Body,
             _ => (),
+        }
+        if matches!(event, Up | Down | Upward | Top | Downward | Bottom) {
+            use Menu::*;
+            // TODO: ...
+            match self.get_crr_menu_item() {
+                Snapshots => self.snapshots_ui.refresh_table_data(),
+                Groups => (),
+                _ => (),
+            }
         }
     }
     #[inline]

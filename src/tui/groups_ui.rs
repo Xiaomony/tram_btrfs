@@ -10,9 +10,16 @@ use crate::core::{btrfs_manager::BtrfsManager, error::CResult};
 use crate::tui::app_tui::{AppEvent, get_body_color};
 use crate::tui::menu::Menu;
 
+#[derive(PartialEq)]
+enum GroupsUIFocus {
+    GroupList,
+    GroupInfo,
+}
+
 pub struct GroupsUI {
     btrfs_mgr: Rc<RefCell<BtrfsManager>>,
     selected_group: Rc<RefCell<Option<usize>>>,
+    focus: GroupsUIFocus,
 }
 
 impl GroupsUI {
@@ -23,6 +30,7 @@ impl GroupsUI {
         Self {
             btrfs_mgr,
             selected_group,
+            focus: GroupsUIFocus::GroupList,
         }
     }
 
@@ -38,7 +46,10 @@ impl GroupsUI {
         let groupinfo_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .title("  Group Info ")
-            .title_alignment(Alignment::Center);
+            .title_alignment(Alignment::Center)
+            .style(get_body_color(
+                focused && self.focus == GroupsUIFocus::GroupInfo,
+            ));
         let mgr = self.btrfs_mgr.borrow();
 
         // render groups table
@@ -71,7 +82,9 @@ impl GroupsUI {
         )
         .header(header)
         .block(groups_block)
-        .style(get_body_color(focused));
+        .style(get_body_color(
+            focused && self.focus == GroupsUIFocus::GroupList,
+        ));
         frame.render_widget(group_table, groups_area);
 
         // render current selected group information
@@ -82,6 +95,8 @@ impl GroupsUI {
         use AppEvent::*;
         match event {
             Left | WindowLeft | Escape => return Ok(true),
+            WindowUp => self.focus = GroupsUIFocus::GroupList,
+            WindowDown => self.focus = GroupsUIFocus::GroupInfo,
             _ => (),
         }
         Ok(false)

@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, HorizontalAlignment, Layout, Rect},
+    layout::{Alignment, Constraint, HorizontalAlignment, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::Line,
     widgets::{Block, BorderType, Padding, Paragraph, Row, Table, TableState},
@@ -121,13 +121,11 @@ impl SnapshotsUI {
         } else {
             ((l1 * 100 / (l1 + l2)) as u16).clamp(20, 80)
         };
-        let vertical_layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(manual_percentage),
-                Constraint::Percentage(100 - manual_percentage),
-            ])
-            .split(area);
+        let vertical_layout = Layout::vertical([
+            Constraint::Percentage(manual_percentage),
+            Constraint::Percentage(100 - manual_percentage),
+        ])
+        .split(area);
 
         self.render_manual_block(
             frame,
@@ -141,6 +139,7 @@ impl SnapshotsUI {
             scheduled_snapshot_rows,
             focused && self.focus == SnapshotUIFocus::ScheduledSnapshot,
         );
+
         if let SnapshotUIFocus::ConfirmingDelete { ref msg, .. } = self.focus {
             app_tui::show_confirm_popup(
                 frame,
