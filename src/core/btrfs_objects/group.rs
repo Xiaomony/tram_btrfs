@@ -6,6 +6,7 @@ use crate::globals;
 use serde::{Deserialize, Serialize};
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
+use tracing::instrument;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Group {
@@ -77,12 +78,12 @@ impl Group {
             if available_subvolumes.contains(crr) {
                 i += 1;
             } else {
-                // WARN: here uses `swap_remove`, which won't preserve the original order of subvolumes
-                removed_subvolume.push(self.subvolumes.swap_remove(i));
+                removed_subvolume.push(self.subvolumes.remove(i));
             }
         }
     }
 
+    #[instrument]
     pub fn create_snapshot(&mut self, snapshot_type: SnapshotType) -> CResult<()> {
         let (date, time) = get_current_date_time();
         let group_snapshot_fullpath = globals::SNAPSHOT_GROUP_DIR_PATH
@@ -118,7 +119,10 @@ impl Group {
         Ok(())
     }
 
-    pub fn rename_group<T: Into<String>>(&mut self, new_name: T) -> CResult<()> {
+    #[instrument]
+    /// Do not call this directly!!
+    /// Call it from BtrfsManager::rename_group() to check dulplicated group name
+    pub fn rename_group<T: Into<String> + std::fmt::Debug>(&mut self, new_name: T) -> CResult<()> {
         let new_name = new_name.into();
         if self.group_name == new_name {
             return Ok(());
@@ -132,6 +136,7 @@ impl Group {
         Ok(())
     }
 
+    #[instrument]
     pub fn delete_snapshot(&mut self, index: usize) -> CResult<()> {
         if index >= self.snapshots.len() {
             return throw_invalid_index(index, "deleting snapshot(invalid snapshot index)");

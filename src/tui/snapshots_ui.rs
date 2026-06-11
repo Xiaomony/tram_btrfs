@@ -1,3 +1,4 @@
+use color_eyre::Section;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, HorizontalAlignment, Layout, Rect},
@@ -86,6 +87,7 @@ impl SnapshotsUI {
     }
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
+        self.refresh_table_data();
         if self.no_valid_group {
             let lines: Vec<Line<'static>> = vec![
                 Menu::Snapshots
@@ -272,10 +274,11 @@ impl SnapshotsUI {
                     if let Some(mut group) =
                         get_sel_group_mut(&self.btrfs_mgr, &self.selected_group)
                     {
-                        group.delete_snapshot(index)?;
+                        group
+                            .delete_snapshot(index)
+                            .warning("Fail to delete snapshot")?;
                     }
                     self.focus = SnapshotUIFocus::ManualSnapshot;
-                    self.refresh_table_data();
                 }
                 Escape | No => self.focus = SnapshotUIFocus::ManualSnapshot,
                 _ => (),
@@ -330,11 +333,13 @@ impl SnapshotsUI {
             }
             WindowUp => self.focus = SnapshotUIFocus::ManualSnapshot,
             WindowDown => self.focus = SnapshotUIFocus::ScheduledSnapshot,
-            Create => {
-                if let Some(mut group) = get_sel_group_mut(&self.btrfs_mgr, &self.selected_group) {
-                    group.create_snapshot(SnapshotType::Manually)?;
-                }
-                self.refresh_table_data();
+            Create
+                if let Some(mut group) =
+                    get_sel_group_mut(&self.btrfs_mgr, &self.selected_group) =>
+            {
+                group
+                    .create_snapshot(SnapshotType::Manually)
+                    .warning("Fail to create new snapshot.")?;
             }
             Delete => {
                 if self.focus == SnapshotUIFocus::ManualSnapshot

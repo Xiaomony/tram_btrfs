@@ -1,6 +1,6 @@
 use crate::core::error::{AppError, CResult};
 use crate::globals;
-use color_eyre::eyre::Context;
+use color_eyre::Section;
 use nix::mount::{self, MsFlags};
 use std::ffi::OsStr;
 use std::fs::create_dir_all;
@@ -14,8 +14,9 @@ pub fn check_root_permission() -> CResult<()> {
     if nix::unistd::Uid::effective().is_root() {
         Ok(())
     } else {
-        Err(AppError::Permission)
-            .wrap_err("This program needs root permission. Please run it with 'sudo'.")
+        Err(AppError::General)
+            .warning("This program needs root permission.")
+            .suggestion("Please run it with 'sudo'.")
     }
 }
 
@@ -23,12 +24,20 @@ pub fn exec_command<T: AsRef<OsStr>, E: AsRef<[T]>>(
     command: &'static str,
     args: E,
 ) -> CResult<String> {
+    let args_str = || {
+        args.as_ref()
+            .iter()
+            .map(|x| x.as_ref().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
     let child_output = Command::new(command)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .args(args.as_ref())
-        .output()?;
+        .output()
+        .with_warning(|| format!("Fail to execute '{command} {}'.", args_str()))?;
     if child_output.status.success() {
         Ok(String::from_utf8_lossy(&child_output.stdout).to_string())
     } else {
@@ -36,8 +45,8 @@ pub fn exec_command<T: AsRef<OsStr>, E: AsRef<[T]>>(
         Err(AppError::ChildProcess {
             command,
             err_msg: err_msg.to_string(),
-        }
-        .into())
+        })
+        .warning(format!("'{command} {}' failed.", args_str()))
     }
 }
 
@@ -55,7 +64,7 @@ pub fn check_is_btrfs_filesystem(device: &str) -> CResult<()> {
     if result {
         Ok(())
     } else {
-        Err(AppError::NotBtrfs(device.to_string()).into())
+        Err(AppError::General).warning(format!("{device} is not a Btrfs file system."))
     }
 }
 
@@ -69,13 +78,17 @@ pub fn mount_to_default_point(device: &str) -> CResult<()> {
         MsFlags::MS_NODEV | MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
         None::<&str>,
     )
-    .wrap_err_with(|| format!("Can't mount {} to {}", device, globals::MOUNT_POINT))
+    .warning(format!(
+        "Can't mount {} to {}",
+        device,
+        globals::MOUNT_POINT
+    ))
 }
 
 #[inline]
 pub fn umount_from_default_point() -> CResult<()> {
     mount::umount(globals::MOUNT_POINT)
-        .wrap_err_with(|| format!("Can't umount from {}", globals::MOUNT_POINT))
+        .warning(format!("Can't unmount from {}", globals::MOUNT_POINT))
 }
 
 #[inline]

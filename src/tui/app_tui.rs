@@ -3,7 +3,6 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, HorizontalAlignment, Layout, Rect},
     style::{Color, Modifier, Styled},
-    text::Line,
     widgets::{Block, BorderType, Borders, Clear, List, ListState, Padding, Paragraph},
 };
 use std::cell::{Ref, RefCell, RefMut};
@@ -208,15 +207,6 @@ impl AppTUI {
             Downward | Bottom => self.menu_state.select_last(),
             Right | Enter | WindowRight => self.focus = AppFocus::Body,
             _ => (),
-        }
-        if matches!(event, Up | Down | Upward | Top | Downward | Bottom) {
-            use Menu::*;
-            // TODO: ...
-            match self.get_crr_menu_item() {
-                Snapshots => self.snapshots_ui.refresh_table_data(),
-                Groups => (),
-                _ => (),
-            }
         }
     }
     #[inline]

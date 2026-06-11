@@ -1,9 +1,11 @@
 use crate::core::btrfs_objects::group::Group;
 use crate::core::error::{AppError, CResult, throw_invalid_index};
 use crate::globals;
+use color_eyre::Section;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
+use tracing::instrument;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct AutoSnapshotSchedule {
@@ -22,22 +24,6 @@ impl AutoSnapshotSchedule {
             boot_max: 0,
         }
     }
-    #[inline]
-    pub fn _change_daily(&mut self, new: usize) {
-        self.daily_max = new;
-    }
-    #[inline]
-    pub fn _change_weekly(&mut self, new: usize) {
-        self.weekly_max = new;
-    }
-    #[inline]
-    pub fn _change_monthly(&mut self, new: usize) {
-        self.monthly_max = new;
-    }
-    #[inline]
-    pub fn _change_boot(&mut self, new: usize) {
-        self.boot_max = new;
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -49,12 +35,15 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    #[instrument]
     pub fn load_config() -> CResult<AppConfig> {
-        create_dir_all(&*globals::CONFIG_DIR)?;
+        create_dir_all(&*globals::CONFIG_DIR)
+            .warning("Fail to create or open configuration directory.")?;
         let config_file_path = &*globals::MAIN_CONFIG_FILE_PATH;
         if fs::exists(config_file_path)? {
-            let s = std::fs::read_to_string(config_file_path)?;
-            Ok(toml::from_str::<AppConfig>(&s)?)
+            let s = std::fs::read_to_string(config_file_path)
+                .warning("Fail to read configuration file.")?;
+            Ok(toml::from_str::<AppConfig>(&s).warning("Fail to parse configuration file.")?)
         } else {
             let config = Self {
                 schedule: AutoSnapshotSchedule::new_default(),
@@ -72,15 +61,18 @@ impl AppConfig {
     }
 
     #[inline]
+    #[instrument]
     pub fn write_config(&self) -> CResult<()> {
-        std::fs::write(&*globals::MAIN_CONFIG_FILE_PATH, toml::to_string(self)?)?;
+        std::fs::write(&*globals::MAIN_CONFIG_FILE_PATH, toml::to_string(self)?)
+            .warning("Fail to write to configuration file.")?;
         Ok(())
     }
 
     #[inline]
-    pub fn add_new_group<T: Into<String>>(
+    #[instrument]
+    pub fn add_new_group(
         &mut self,
-        group_name: T,
+        group_name: impl Into<String> + std::fmt::Debug,
         subvolumes: Vec<PathBuf>,
     ) -> CResult<()> {
         self.groups.push(Group::new(group_name.into(), subvolumes));
@@ -88,7 +80,12 @@ impl AppConfig {
     }
 
     #[inline]
-    pub fn rename_group(&mut self, index: usize, new_name: impl Into<String>) -> CResult<()> {
+    #[instrument]
+    pub fn rename_group(
+        &mut self,
+        index: usize,
+        new_name: impl Into<String> + std::fmt::Debug,
+    ) -> CResult<()> {
         let new_name = new_name.into();
         // check for duplicated name
         if self.groups.iter().any(|x| x.get_name() == new_name) {
@@ -107,6 +104,7 @@ impl AppConfig {
     }
 
     #[inline]
+    #[instrument]
     pub fn change_schedule(&mut self, new_schedule: AutoSnapshotSchedule) -> CResult<()> {
         self.schedule = new_schedule;
         self.write_config()

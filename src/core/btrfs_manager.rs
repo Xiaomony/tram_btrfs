@@ -1,18 +1,18 @@
 use color_eyre::Section;
-use color_eyre::eyre::Context;
 use file_lock::{FileLock, FileOptions};
 use regex::Regex;
 use std::fs::create_dir_all;
 use std::path::PathBuf;
+use tracing::instrument;
 
 use crate::core::app_config::AppConfig;
 use crate::core::btrfs_objects::group::Group;
-use crate::core::btrfs_objects::snapshot_type::SnapshotType;
 use crate::core::btrfs_objects::subvolume_snapshot::SubvolumeSnapshot;
 use crate::core::error::{AppError, CResult, throw_invalid_index};
 use crate::core::utils::*;
 use crate::globals;
 
+#[derive(Debug)]
 pub struct BtrfsManager {
     _device: String,
     file_lock: FileLock,
@@ -27,6 +27,7 @@ pub struct BtrfsManager {
 }
 
 impl BtrfsManager {
+    #[instrument]
     /// create an object based on a specified block device
     pub fn new(device: String) -> CResult<Self> {
         check_root_permission()?;
@@ -65,19 +66,22 @@ impl BtrfsManager {
         Self::new(get_crr_os_device()?)
     }
 
+    #[instrument]
     fn create_file_lock() -> CResult<FileLock> {
         let options = FileOptions::new().write(true).create(true);
-        match FileLock::lock(globals::FILE_LOCK, false, options) {
-            Ok(file_lock) => Ok(file_lock),
-            Err(e) => Err(AppError::MultipleInstance(e).into()),
-        }
+        FileLock::lock(globals::FILE_LOCK, false, options)
+            .warning("Fail to create file lock.")
+            .suggestion("Another Tram TUI instance is running, please close it!")
     }
 
+    #[instrument]
     /// returns if the subvolume layout satisfies `@` and `@home`
     fn get_subvolumes_and_snapshots(&mut self) -> CResult<()> {
         let btrfs_output = exec_command("btrfs", ["subvolume", "list", "-o", globals::MOUNT_POINT])
-            .wrap_err("Error occurs when getting the subvolume list")?;
-        let r = Regex::new(r"(?m)^ID.*top level 5 path (.+)$")?;
+            .warning("Error occurs when getting the subvolume list")?;
+        let r = Regex::new(r"(?m)^ID.*top level 5 path (.+)$")
+            .warning("Fail to compile regex expression")
+            .suggestion("It's a bug report it pls.")?;
 
         let mut layout_at = false; // is there a `@` subvolume
         let mut layout_at_home = false; // is there a `@home` subvolume
@@ -101,7 +105,7 @@ impl BtrfsManager {
             .for_each(|x| x.verify_subvolumes(&(self.subvolumes), &mut removed_config_subvols));
         if !removed_config_subvols.is_empty() {
             return Err(AppError::InvalidConfig)
-                .wrap_err_with(|| {
+                .with_warning(|| {
                     format!("Non-existent subvolumes occur in config:\n{removed_config_subvols:?}")
                 })
                 .suggestion("The invalid subvolume has been removed, please restart.");
@@ -150,22 +154,28 @@ impl BtrfsManager {
         }
     }
 
-    pub fn create_snapshot(&mut self, index: usize, snapshot_type: SnapshotType) -> CResult<()> {
-        let Some(group) = self.app_config.groups.get_mut(index) else {
-            return throw_invalid_index(index, "creating snapshot");
-        };
-        group.create_snapshot(snapshot_type)
-    }
+    // TODO: may need to delete this
 
-    pub fn delete_snapshot(&mut self, group_index: usize, snapshot_index: usize) -> CResult<()> {
-        let Some(group) = self.app_config.groups.get_mut(group_index) else {
-            return throw_invalid_index(group_index, "deleting snapshot(invalid group index)");
-        };
-        group.delete_snapshot(snapshot_index)
-    }
+    // pub fn create_snapshot(&mut self, index: usize, snapshot_type: SnapshotType) -> CResult<()> {
+    //     let Some(group) = self.app_config.groups.get_mut(index) else {
+    //         return throw_invalid_index(index, "creating snapshot");
+    //     };
+    //     group.create_snapshot(snapshot_type)
+    // }
+
+    // pub fn delete_snapshot(&mut self, group_index: usize, snapshot_index: usize) -> CResult<()> {
+    //     let Some(group) = self.app_config.groups.get_mut(group_index) else {
+    //         return throw_invalid_index(group_index, "deleting snapshot(invalid group index)");
+    //     };
+    //     group.delete_snapshot(snapshot_index)
+    // }
 
     #[inline]
-    pub fn rename_group<T: Into<String>>(&mut self, index: usize, new_name: T) -> CResult<()> {
+    pub fn rename_group(
+        &mut self,
+        index: usize,
+        new_name: impl Into<String> + std::fmt::Debug,
+    ) -> CResult<()> {
         self.app_config.rename_group(index, new_name)
     }
 

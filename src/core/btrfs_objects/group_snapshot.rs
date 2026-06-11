@@ -1,3 +1,6 @@
+use color_eyre::Section;
+use tracing::instrument;
+
 use crate::core::btrfs_objects::snapshot_type::SnapshotType;
 use crate::core::btrfs_objects::subvolume_snapshot::SubvolumeSnapshot;
 use crate::core::error::CResult;
@@ -39,6 +42,7 @@ impl GroupSnapshot {
         ));
     }
 
+    #[instrument]
     pub fn delete(self, group_name: &str) -> CResult<()> {
         let fullpaths = self
             .subvolume_snapshots
@@ -55,7 +59,14 @@ impl GroupSnapshot {
             .join(group_name)
             .join(self.snapshot_type.as_ref())
             .join(self.date + "_" + &self.time);
-        remove_dir_all(group_snapshot_fullpath)?;
+        remove_dir_all(&group_snapshot_fullpath)
+            .warning("Fail to remove snapshot directory.")
+            .with_suggestion(|| {
+                format!(
+                    "Please run the program again and manually remove '{}' before it exits.",
+                    group_snapshot_fullpath.to_string_lossy()
+                )
+            })?;
         Ok(())
     }
 
