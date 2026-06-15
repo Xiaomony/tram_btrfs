@@ -3,7 +3,7 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, HorizontalAlignment, Layout, Rect},
     style::{Color, Modifier, Stylize},
-    widgets::{Block, BorderType, Borders, Clear, List, ListState, Padding, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, List, ListState, Padding, Paragraph, Wrap},
 };
 use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
@@ -253,14 +253,18 @@ pub fn get_sel_group_mut<'a>(
     }
 }
 
-/// show confirming widget
+/// show confirming widget, wrap the content automatically
+/// `yes_no_confirming`:
+/// if true, it will display a "Yes" and a "No" at the bottom.
+/// Otherwise, only display a "Ok".
 pub fn show_confirm_popup(
     frame: &mut Frame,
     area: Rect,
     title: impl Into<String>,
     content: Paragraph,
+    yes_no_confirming: bool,
 ) {
-    let centered_area = area.centered(Constraint::Percentage(50), Constraint::Percentage(50));
+    let centered_area = area.centered(Constraint::Percentage(40), Constraint::Percentage(40));
 
     let confirm_block = Block::bordered()
         .border_type(BorderType::Rounded)
@@ -269,32 +273,42 @@ pub fn show_confirm_popup(
         .title(title.into())
         .title_alignment(Alignment::Center);
 
-    let [content_area, yesno_area] =
+    let [content_area, bottom_area] =
         confirm_block
             .inner(centered_area)
             .layout(&Layout::vertical([
                 Constraint::Fill(1),
                 Constraint::Length(1),
             ]));
-    let [yes_area, no_area] = yesno_area.layout(&Layout::horizontal([
-        Constraint::Percentage(50),
-        Constraint::Percentage(50),
-    ]));
     frame.render_widget(Clear, centered_area);
     frame.render_widget(confirm_block, centered_area);
     frame.render_widget(
-        content.block(
-            Block::new()
-                .borders(Borders::BOTTOM)
-                .style(globals::FOCUSED_COLOR),
-        ),
+        content
+            .block(
+                Block::new()
+                    .borders(Borders::BOTTOM)
+                    .style(globals::FOCUSED_COLOR),
+            )
+            .wrap(Wrap { trim: false }),
         content_area,
     );
-    frame.render_widget(
-        Paragraph::new("[Y]es").style(Modifier::REVERSED).centered(),
-        yes_area,
-    );
-    frame.render_widget(Paragraph::new("(N)o").centered(), no_area);
+    if yes_no_confirming {
+        let [yes_area, no_area] = bottom_area.layout(&Layout::horizontal([
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
+        ]));
+        frame.render_widget(
+            Paragraph::new("[Y]es").style(Modifier::REVERSED).centered(),
+            yes_area,
+        );
+        frame.render_widget(Paragraph::new("(N)o").centered(), no_area);
+    } else {
+        let bottom_area = bottom_area.centered_horizontally(Constraint::Ratio(1, 2));
+        frame.render_widget(
+            Paragraph::new("Ok").style(Modifier::REVERSED).centered(),
+            bottom_area,
+        );
+    }
 }
 
 #[inline]

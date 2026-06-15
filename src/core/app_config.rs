@@ -1,5 +1,5 @@
 use crate::core::btrfs_objects::group::Group;
-use crate::core::error::{AppError, CResult, throw_invalid_index};
+use crate::core::error::{CResult, throw_invalid_index};
 use crate::globals;
 use color_eyre::Section;
 use serde::{Deserialize, Serialize};
@@ -79,6 +79,15 @@ impl AppConfig {
         self.write_config()
     }
 
+    #[instrument]
+    pub fn delete_group(&mut self, index: usize) -> CResult<()> {
+        if index >= self.groups.len() {
+            return throw_invalid_index(index, "deleting group");
+        }
+        self.groups.remove(index).delete_group()?;
+        self.write_config()
+    }
+
     /// return false if there's a duplicated group name
     #[inline]
     #[instrument]
@@ -99,6 +108,9 @@ impl AppConfig {
         self.write_config()?;
         Ok(true)
     }
+
+    #[inline]
+    pub fn add_subvol_to_group(&mut self) {}
 
     #[inline]
     pub fn get_schedule(&self) -> AutoSnapshotSchedule {

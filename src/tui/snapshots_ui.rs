@@ -2,7 +2,7 @@ use color_eyre::Section;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, HorizontalAlignment, Layout, Rect},
-    style::{Color, Modifier, Style, Stylize},
+    style::{Modifier, Style, Stylize},
     text::Line,
     widgets::{Block, BorderType, Padding, Paragraph, Row, Table, TableState},
 };
@@ -11,7 +11,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::{
     core::error::CResult,
     tui::{
-        app_tui::{self, AppEvent, get_sel_group, get_sel_group_mut},
+        app_tui::{self, AppEvent, get_body_color, get_sel_group, get_sel_group_mut},
         menu::Menu,
     },
 };
@@ -34,8 +34,10 @@ pub struct SnapshotsUI {
     /// the index of current selected snapshot group
     selected_group: Rc<RefCell<Option<usize>>>,
     focus: SnapshotUIFocus,
-    manual_snapshot_infos: Vec<(usize, [String; 3])>,
-    scheduled_snapshot_infos: Vec<(usize, [String; 4])>,
+    /// data , time, subvolumes
+    manual_snapshot_infos: Vec<(usize, String, String, Vec<String>)>,
+    /// data, time, type,subvolumes
+    scheduled_snapshot_infos: Vec<(usize, String, String, String, Vec<String>)>,
     no_valid_group: bool,
 }
 
@@ -68,19 +70,21 @@ impl SnapshotsUI {
         self.no_valid_group = false;
         let snapshots = group.get_snapshots();
         for (i, x) in snapshots.iter().enumerate() {
-            let subvols = x.get_snapshoted_subvolumes().join("  ");
+            let subvols = x
+                .get_snapshoted_subvolumes()
+                .iter()
+                .map(|x| x.to_string())
+                .collect();
             if x.get_type() == SnapshotType::Manually {
                 self.manual_snapshot_infos
-                    .push((i, [x.get_date(), x.get_time(), subvols]));
+                    .push((i, x.get_date(), x.get_time(), subvols));
             } else {
                 self.scheduled_snapshot_infos.push((
                     i,
-                    [
-                        x.get_date(),
-                        x.get_time(),
-                        x.get_type().to_string(),
-                        subvols,
-                    ],
+                    x.get_date(),
+                    x.get_time(),
+                    x.get_type().to_string(),
+                    subvols,
                 ));
             }
         }
@@ -107,12 +111,12 @@ impl SnapshotsUI {
         let manual_snapshot_rows: Vec<Row<'_>> = self
             .manual_snapshot_infos
             .iter()
-            .map(|x| Row::new(x.1.clone()))
+            .map(|x| Row::new([x.1.clone(), x.2.clone(), x.3.join("  ")]))
             .collect();
         let scheduled_snapshot_rows: Vec<Row<'_>> = self
             .scheduled_snapshot_infos
             .iter()
-            .map(|x| Row::new(x.1.clone()))
+            .map(|x| Row::new([x.1.clone(), x.2.clone(), x.3.clone(), x.4.join("  ")]))
             .collect();
 
         // determine the height of each block dynamically
@@ -148,16 +152,8 @@ impl SnapshotsUI {
                 frame.area(),
                 "Delete the following snapshot?",
                 Paragraph::new(msg.as_str()),
+                true,
             );
-        }
-    }
-
-    #[inline]
-    fn get_color(focused: bool) -> Color {
-        if focused {
-            globals::FOCUSED_COLOR
-        } else {
-            globals::BODY_COLOR
         }
     }
 
@@ -173,7 +169,7 @@ impl SnapshotsUI {
         } else if self.manual_snapshot_table_state.selected().is_none() {
             self.manual_snapshot_table_state.select_first();
         }
-        let main_color = Self::get_color(focused);
+        let main_color = get_body_color(focused);
         let manual_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .style(main_color)
@@ -223,7 +219,7 @@ impl SnapshotsUI {
         } else if self.scheduled_snapshot_table_state.selected().is_none() {
             self.scheduled_snapshot_table_state.select_first();
         }
-        let main_color = Self::get_color(focused);
+        let main_color = get_body_color(focused);
         let scheduled_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .style(main_color)
@@ -344,6 +340,7 @@ impl SnapshotsUI {
             Delete => {
                 if self.focus == SnapshotUIFocus::ManualSnapshot
                     && let Some(i) = self.manual_snapshot_table_state.selected()
+                    && !self.manual_snapshot_infos.is_empty()
                 {
                     let info = self
                         .manual_snapshot_infos
@@ -351,11 +348,11 @@ impl SnapshotsUI {
                         .unwrap();
                     self.focus = SnapshotUIFocus::ConfirmingDelete {
                         msg: format!(
-                            "Type: {}\nData: {}\nTime: {}\nContained Subvolumes:\n{}",
+                            "Type: {}\nData: {}\nTime: {}\nContained Subvolumes:\n  {}",
                             SnapshotType::Manually,
-                            info.1[0],
-                            info.1[1],
-                            info.1[2],
+                            info.1,
+                            info.2,
+                            info.3.join("\n  "),
                         ),
                         index: info.0,
                     };
@@ -368,8 +365,11 @@ impl SnapshotsUI {
                         .unwrap();
                     self.focus = SnapshotUIFocus::ConfirmingDelete {
                         msg: format!(
-                            "Type: {}\nData: {}\nTime: {}\nContained Subvolumes:\n{}",
-                            info.1[2], info.1[0], info.1[1], info.1[3],
+                            "Type: {}\nData: {}\nTime: {}\nContained Subvolumes:\n  {}",
+                            info.1,
+                            info.2,
+                            info.3,
+                            info.4.join("\n  "),
                         ),
                         index: info.0,
                     };

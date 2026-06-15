@@ -175,7 +175,31 @@ impl BtrfsManager {
             return throw_invalid_index(group_index, "add subvolume to group(invalid group index)");
         };
         group.add_subvolume(subvol);
+        self.app_config.write_config()?;
         Ok(())
+    }
+
+    /// subvol_index here is the index of the subvolume inside `subvolumes: Vec<PathBuf>` of the group
+    pub fn remove_subvol_from_group(
+        &mut self,
+        group_index: usize,
+        subvol_index: usize,
+    ) -> CResult<()> {
+        let Some(group) = self.app_config.groups.get_mut(group_index) else {
+            return throw_invalid_index(
+                group_index,
+                "remove subvolume to group(invalid group index)",
+            );
+        };
+        group.remove_subvolume(subvol_index);
+        self.app_config.write_config()?;
+        Ok(())
+    }
+
+    #[instrument]
+    #[inline]
+    pub fn delete_group(&mut self, index: usize) -> CResult<()> {
+        self.app_config.delete_group(index)
     }
 
     #[inline]

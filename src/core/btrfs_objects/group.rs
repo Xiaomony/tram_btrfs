@@ -145,19 +145,33 @@ impl Group {
         snapshot.delete(&self.group_name)
     }
 
+    #[instrument]
+    /// delete all the snapshots and the delete the group
+    pub fn delete_group(self) -> CResult<()> {
+        for obj in self.snapshots {
+            obj.delete(&self.group_name)?;
+        }
+        // remove relative directory
+        let group_dir = globals::SNAPSHOT_GROUP_DIR_PATH.join(self.group_name);
+        std::fs::remove_dir_all(group_dir)?;
+        Ok(())
+    }
+
     #[inline]
+    /// Do NOT call this directly, call this from AppConfig and update the config file immediately
     /// add a subvolume to this group, `subvol_path` should be valid
     pub fn add_subvolume<T: Into<PathBuf>>(&mut self, subvol_path: T) {
         self.subvolumes.push(subvol_path.into())
     }
 
     #[inline]
-    pub fn remove_subvolume(&mut self, index: usize) -> CResult<()> {
-        if index < self.subvolumes.len() {
-            self.subvolumes.remove(index);
-            Ok(())
-        } else {
-            throw_invalid_index(index, "removing subvolumes from a group")
+    /// Do NOT call this directly, call this from AppConfig and update the config file immediately
+    /// index will be automatically clamped
+    /// Do nothing if included subvolumes is empty
+    pub fn remove_subvolume(&mut self, index: usize) {
+        if !self.subvolumes.is_empty() {
+            self.subvolumes
+                .remove(index.clamp(0, self.subvolumes.len() - 1));
         }
     }
 

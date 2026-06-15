@@ -1,13 +1,13 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Layout, Rect},
+    layout::{Alignment, Constraint, Layout, Margin, Rect},
     style::{Modifier, Stylize},
     text::Line,
     widgets::{Block, BorderType, List, ListState, Paragraph, Row, Table, TableState},
 };
 use std::{cell::RefCell, rc::Rc};
 
-use crate::tui::app_tui::{AppEvent, get_body_color};
+use crate::tui::app_tui::{self, AppEvent, get_body_color};
 use crate::tui::menu::Menu;
 use crate::{
     core::{btrfs_manager::BtrfsManager, error::CResult},
@@ -19,6 +19,7 @@ enum GroupsUIFocus {
     GroupList,
     IncludedSubvols,
     ExcludedSubvols,
+    DeleteGroup { msg: String, index: usize },
 }
 
 pub struct GroupsUI {
@@ -56,6 +57,15 @@ impl GroupsUI {
 
         self.render_group_table(frame, focused, groups_area);
         self.render_group_info(frame, focused, groupinfo_area);
+        if let GroupsUIFocus::DeleteGroup { ref msg, .. } = self.focus {
+            app_tui::show_confirm_popup(
+                frame,
+                frame.area(),
+                "Delete the following group?",
+                Paragraph::new(msg.as_str()),
+                true,
+            );
+        }
     }
 
     /// body_focused: whether the focus is inside 'Groups' (not need to be inside the group table)
@@ -93,7 +103,7 @@ impl GroupsUI {
                 row
             })
             .collect();
-        let header = Row::new(["Group Name", "Snapshot Count", "Contained Subvolumes"])
+        let header = Row::new(["Group Name", "Snapshot Count", "Included Subvolumes"])
             .italic()
             .bold()
             .underlined();
@@ -150,21 +160,13 @@ impl GroupsUI {
                 Constraint::Length(1),
                 Constraint::Fill(1),
             ]));
-            let included_subvol_list_area =
-                included_subvol_list_area.inner(ratatui::layout::Margin {
-                    horizontal: 2,
-                    vertical: 0,
-                });
+            let included_subvol_list_area = included_subvol_list_area.inner(Margin::new(2, 0));
             let [excluded_subvol_list_title_area, excluded_subvol_list_area] =
                 right_area.layout(&Layout::vertical([
                     Constraint::Length(1),
                     Constraint::Fill(1),
                 ]));
-            let excluded_subvol_list_area =
-                excluded_subvol_list_area.inner(ratatui::layout::Margin {
-                    horizontal: 2,
-                    vertical: 0,
-                });
+            let excluded_subvol_list_area = excluded_subvol_list_area.inner(Margin::new(2, 0));
             frame.render_widget(groupinfo_block, area);
 
             // render group name
@@ -298,6 +300,7 @@ impl GroupsUI {
                     GroupList => self.group_list_table_state.select_previous(),
                     IncludedSubvols => self.inluded_subvols_list_state.select_previous(),
                     ExcludedSubvols => self.excluded_subvols_list_state.select_previous(),
+                    _ => (),
                 }
             }
             Down => {
@@ -306,6 +309,7 @@ impl GroupsUI {
                     GroupList => self.group_list_table_state.select_next(),
                     IncludedSubvols => self.inluded_subvols_list_state.select_next(),
                     ExcludedSubvols => self.excluded_subvols_list_state.select_next(),
+                    _ => (),
                 }
             }
             Top => {
@@ -314,6 +318,7 @@ impl GroupsUI {
                     GroupList => self.group_list_table_state.select_first(),
                     IncludedSubvols => self.inluded_subvols_list_state.select_first(),
                     ExcludedSubvols => self.excluded_subvols_list_state.select_first(),
+                    _ => (),
                 }
             }
             Bottom => {
@@ -322,6 +327,7 @@ impl GroupsUI {
                     GroupList => self.group_list_table_state.select_last(),
                     IncludedSubvols => self.inluded_subvols_list_state.select_last(),
                     ExcludedSubvols => self.excluded_subvols_list_state.select_last(),
+                    _ => (),
                 }
             }
 
@@ -341,24 +347,23 @@ impl GroupsUI {
                     }
                     IncludedSubvols => {
                         let mut mgr = self.btrfs_mgr.borrow_mut();
-                        let groups = mgr.get_mut_groups();
-                        let len = groups.len();
-                        if let Some(focused_group) = self
+                        let groups = mgr.get_groups();
+                        // let len = groups.len();
+                        if let Some(focused_group_index) = self
                             .group_list_table_state
                             .selected()
-                            .and_then(|x| groups.get_mut(x.clamp(0, len - 1)))
-                            && !focused_group.get_subvolumes().is_empty()
-                            && let Some(i) = self.inluded_subvols_list_state.selected()
+                            .map(|x| x.clamp(0, groups.len() - 1))
+                        // .and_then(|x| groups.get_mut(x.clamp(0, len - 1)))
+                        // && !focused_group.get_subvolumes().is_empty()
+                        && let Some(i) = self.inluded_subvols_list_state.selected()
                         {
-                            focused_group.remove_subvolume(
-                                i.clamp(0, focused_group.get_subvolumes().len() - 1),
-                            )?;
+                            mgr.remove_subvol_from_group(focused_group_index, i)?;
+                            // let i = i.clamp(0, focused_group.get_subvolumes().len() - 1),
+                            // focused_group.remove_subvolume()?;
                         }
                     }
                     ExcludedSubvols => {
                         let mut mgr = self.btrfs_mgr.borrow_mut();
-                        // let groups = mgr.get_mut_groups();
-                        // let len = groups.len();
 
                         if !self.crr_focus_group_excluded_subvols.is_empty()
                             && let Some(focused_group_index) = self
@@ -373,7 +378,41 @@ impl GroupsUI {
                             mgr.add_subvol_to_group(focused_group_index, subvol_index)?;
                         }
                     }
+                    _ => (),
                 }
+            }
+
+            Delete => {
+                let mgr = self.btrfs_mgr.borrow();
+                if self.focus == GroupsUIFocus::GroupList
+                    && !mgr.get_groups().is_empty()
+                    && let Some(i) = self.group_list_table_state.selected()
+                {
+                    let i = i.clamp(0, mgr.get_groups().len() - 1);
+                    let group = mgr.get_groups().get(i).unwrap();
+                    self.focus = GroupsUIFocus::DeleteGroup {
+                        msg: format!(
+                            "DANGER: this will delete the following group along with all its snapshots!\n\nGroup Name: {}\nSnapshot Count: {}\nIncluded Subvolumes:{}",
+                            group.get_name(),
+                            group.get_snapshots().len(),
+                            group
+                                .get_subvolumes()
+                                .iter()
+                                .map(|x| x.to_string_lossy())
+                                .fold(String::new(), |acc, y| acc + "\n  " + &y)
+                        ),
+                        index: i,
+                    };
+                }
+            }
+
+            Yes if let GroupsUIFocus::DeleteGroup { index, .. } = self.focus => {
+                self.btrfs_mgr.borrow_mut().delete_group(index)?;
+                self.focus = GroupsUIFocus::GroupList;
+            }
+
+            No if let GroupsUIFocus::DeleteGroup { .. } = self.focus => {
+                self.focus = GroupsUIFocus::GroupList;
             }
             _ => (),
         }
