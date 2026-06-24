@@ -152,9 +152,11 @@ impl BtrfsManager {
         }
     }
 
-    /// Reload and reparse the snapshots after renaming.
-    /// Otherwise the GroupSnapshots contain old snapshot pathes and will panick when deleting them
-    fn reload_snapshots(&mut self) -> CResult<()> {
+    /// 1. Reload and reparse the snapshots after renaming.
+    ///    Otherwise the GroupSnapshots contain old snapshot pathes and will panick when deleting them.
+    /// 2. Reload and reparse the snapshots after recovering.
+    ///    Otherwise the broken snapshots won't show properly.
+    pub fn reload_snapshots(&mut self) -> CResult<()> {
         self.subvolumes.clear();
         self.app_config
             .groups

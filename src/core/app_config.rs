@@ -70,14 +70,14 @@ impl AppConfig {
 
     #[inline]
     #[instrument]
-    /// return false if there's a duplicated group name
+    /// return false if there's a duplicated group name or the name contains invalid characters
     pub fn add_new_group(
         &mut self,
         new_group_name: impl Into<String> + std::fmt::Debug,
         subvolumes: Vec<PathBuf>,
     ) -> CResult<bool> {
         let new_group_name = new_group_name.into();
-        if self.check_duplicated_name(&new_group_name) {
+        if !self.check_group_name_validity(&new_group_name) {
             return Ok(false);
         }
         self.groups.push(Group::new(new_group_name, subvolumes));
@@ -95,10 +95,11 @@ impl AppConfig {
     }
 
     #[inline]
-    /// return true if the group name has already existed
-    pub fn check_duplicated_name(&self, name: impl AsRef<str>) -> bool {
+    /// return false if the group name has already existed or contains invalid characters
+    pub fn check_group_name_validity(&self, name: impl AsRef<str>) -> bool {
         let name = name.as_ref();
-        self.groups.iter().any(|x| x.get_name() == name)
+        self.groups.iter().all(|x| x.get_name() != name)
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
     }
 
     /// return false if there's a duplicated group name
@@ -110,8 +111,8 @@ impl AppConfig {
         new_name: impl Into<String> + std::fmt::Debug,
     ) -> CResult<bool> {
         let new_name = new_name.into();
-        // check for duplicated name
-        if self.check_duplicated_name(&new_name) {
+        // check for duplicated name and name validity
+        if !self.check_group_name_validity(&new_name) {
             return Ok(false);
         }
         let Some(group) = self.groups.get_mut(index) else {

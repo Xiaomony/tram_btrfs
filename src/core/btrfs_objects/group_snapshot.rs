@@ -4,7 +4,7 @@ use tracing::instrument;
 use crate::core::btrfs_objects::snapshot_type::SnapshotType;
 use crate::core::btrfs_objects::subvolume_snapshot::SubvolumeSnapshot;
 use crate::core::error::CResult;
-use crate::core::utils::exec_command;
+use crate::core::utils::{self, exec_command};
 use crate::globals;
 use std::fs::remove_dir_all;
 use std::path::{Path, PathBuf};
@@ -74,6 +74,21 @@ impl GroupSnapshot {
                     )
                 })?;
         }
+        Ok(())
+    }
+
+    /// recover subvolumes from this snapshot
+    #[instrument]
+    pub fn recover(&self) -> CResult<()> {
+        let (data, time) = utils::get_current_date_time();
+        let data_time = format!("{data}_{time}");
+        let broken_snapshot_dir = (*globals::BROKEN_SNAPSHOTS_DIR_PATH).join(data_time);
+        std::fs::create_dir_all(&broken_snapshot_dir)?;
+
+        for x in self.subvolume_snapshots.iter() {
+            x.recover(&broken_snapshot_dir)?;
+        }
+
         Ok(())
     }
 

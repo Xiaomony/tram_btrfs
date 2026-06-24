@@ -71,6 +71,7 @@ impl GroupsUI {
                     "Delete the following group?",
                     Paragraph::new(msg.as_str()),
                     true,
+                    false,
                 );
             }
             GroupsUIFocus::CreateGroupInputing => app_tui::render_input_widget(
@@ -96,6 +97,7 @@ May caused by one of the following reasons:
   1. The group name has already existed.
   2. Your group name contains characters other than letters, numbers, and underscores",
                     ),
+                    false,
                     false,
                 );
             }
@@ -331,10 +333,7 @@ May caused by one of the following reasons:
                     let succeed = match self.focus {
                         GroupsUIFocus::CreateGroupInputing => {
                             let new_name = self.input.value();
-                            new_name
-                                .chars()
-                                .all(|c| c.is_ascii_alphanumeric() || c == '_')
-                                && self.btrfs_mgr.borrow_mut().add_group(new_name)?
+                            self.btrfs_mgr.borrow_mut().add_group(new_name)?
                         }
                         GroupsUIFocus::RenameGroupInputing { index } => self
                             .btrfs_mgr
@@ -514,7 +513,7 @@ May caused by one of the following reasons:
                 return Ok((false, true));
             }
 
-            Rename if self.focus == GroupsUIFocus::GroupList => {
+            RenameOrRecover if self.focus == GroupsUIFocus::GroupList => {
                 let mgr = self.btrfs_mgr.borrow();
                 let groups = mgr.get_groups();
                 if let Some(index) = self.group_list_table_state.selected()

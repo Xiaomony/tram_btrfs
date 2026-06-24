@@ -136,7 +136,9 @@ impl Group {
         let old_name = std::mem::replace(&mut self.group_name, new_name);
         let old_group_path = globals::SNAPSHOT_GROUP_DIR_PATH.join(old_name);
 
-        std::fs::rename(old_group_path, new_group_path)?;
+        if std::fs::exists(&old_group_path)? {
+            std::fs::rename(old_group_path, new_group_path)?;
+        }
 
         Ok(())
     }
@@ -167,6 +169,17 @@ impl Group {
             }).suggestion("You may need to run this program again(to mount the device)\nand delete it manually('sudo btrfs subvolume delete ...').")?;
         }
         Ok(())
+    }
+
+    #[instrument]
+    pub fn recover(&mut self, index: usize) -> CResult<()> {
+        if !self.snapshots.is_empty()
+            && let Some(x) = self.snapshots.get(index)
+        {
+            x.recover()
+        } else {
+            throw_invalid_index(index, "recovering snapshot to subvolume")
+        }
     }
 
     #[inline]

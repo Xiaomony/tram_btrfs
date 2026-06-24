@@ -3,7 +3,7 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, HorizontalAlignment, Layout, Offset, Rect},
     style::{Color, Modifier, Stylize},
-    text::Line,
+    text::{Line, Text},
     widgets::{Block, BorderType, Borders, Clear, List, ListState, Padding, Paragraph, Wrap},
 };
 use std::cell::{Ref, RefCell, RefMut};
@@ -46,7 +46,8 @@ pub enum AppEvent {
     // operations
     Create,
     Delete,
-    Rename,
+    /// User ***pressed R***
+    RenameOrRecover,
     Escape,
     Enter,
     Yes, // press `y` to confirm
@@ -172,7 +173,7 @@ impl AppTUI {
                 // operations
                 Char('a') => AppEvent::Create,
                 Char('d') | Char('x') => AppEvent::Delete,
-                Char('r') => AppEvent::Rename,
+                Char('r') => AppEvent::RenameOrRecover,
                 Char(' ') | Enter => AppEvent::Enter,
                 Char('y') | Char('Y') => AppEvent::Yes,
                 Char('n') | Char('N') => AppEvent::No,
@@ -282,8 +283,13 @@ pub fn show_confirm_popup(
     title: impl Into<String>,
     content: Paragraph,
     yes_no_confirming: bool,
+    larger_popup_window: bool,
 ) {
-    let centered_area = area.centered(Constraint::Percentage(40), Constraint::Percentage(40));
+    let centered_area = if larger_popup_window {
+        area.centered(Constraint::Percentage(70), Constraint::Percentage(70))
+    } else {
+        area.centered(Constraint::Percentage(40), Constraint::Percentage(40))
+    };
 
     let confirm_block = Block::bordered()
         .border_type(BorderType::Rounded)
@@ -317,14 +323,14 @@ pub fn show_confirm_popup(
             Constraint::Percentage(50),
         ]));
         frame.render_widget(
-            Paragraph::new("[Y]es").style(Modifier::REVERSED).centered(),
+            Text::from("[Y]es").style(Modifier::REVERSED).centered(),
             yes_area,
         );
-        frame.render_widget(Paragraph::new("(N)o").centered(), no_area);
+        frame.render_widget(Text::from("(N)o").centered(), no_area);
     } else {
         let bottom_area = bottom_area.centered_horizontally(Constraint::Ratio(1, 2));
         frame.render_widget(
-            Paragraph::new("Ok").style(Modifier::REVERSED).centered(),
+            Text::from("Ok").style(Modifier::REVERSED).centered(),
             bottom_area,
         );
     }

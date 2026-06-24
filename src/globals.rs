@@ -36,6 +36,9 @@ pub static TOP_DIR_PATH: LazyLock<PathBuf> =
 /// equals to PathBuf::from("/run/tram_btrfs/tram_btrfs/snapshot_groups")
 pub static SNAPSHOT_GROUP_DIR_PATH: LazyLock<PathBuf> =
     LazyLock::new(|| TOP_DIR_PATH.join(SNAPSHOT_GROUPS_DIR_NAME));
+/// equals to PathBuf::from("/run/tram_btrfs/tram_btrfs/broken")
+pub static BROKEN_SNAPSHOTS_DIR_PATH: LazyLock<PathBuf> =
+    LazyLock::new(|| TOP_DIR_PATH.join(BROKEN_DIR_NAME));
 
 pub static CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("XDG_CONFIG_HOME")

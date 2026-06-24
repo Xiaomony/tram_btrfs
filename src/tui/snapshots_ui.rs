@@ -3,7 +3,7 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, HorizontalAlignment, Layout, Rect},
     style::{Modifier, Style, Stylize},
-    text::Line,
+    text::{Line, Text},
     widgets::{Block, BorderType, Padding, Paragraph, Row, Table, TableState},
 };
 use std::{cell::RefCell, rc::Rc};
@@ -22,6 +22,10 @@ enum SnapshotUIFocus {
         msg: String,
         index: usize,
     },
+    ConfirmingRecover {
+        msg: String,
+        index: usize,
+    },
     /// show a warning when attempting to create snapshot while no subvolumes included
     NoSubvolWarning,
 }
@@ -33,9 +37,9 @@ pub struct SnapshotsUI {
     /// the index of current selected snapshot group
     selected_group: Rc<RefCell<Option<usize>>>,
     focus: SnapshotUIFocus,
-    /// data , time, subvolumes
+    /// `(index, data , time, subvolumes)`
     manual_snapshot_infos: Vec<(usize, String, String, Vec<String>)>,
-    /// data, time, type,subvolumes
+    /// `(index, data, time, type, subvolumes)`
     scheduled_snapshot_infos: Vec<(usize, String, String, String, Vec<String>)>,
     no_valid_group: bool,
 }
@@ -153,6 +157,34 @@ impl SnapshotsUI {
                     "Delete the following snapshot?",
                     Paragraph::new(msg.as_str()),
                     true,
+                    false,
+                );
+            }
+            SnapshotUIFocus::ConfirmingRecover { ref msg, .. } => {
+                let warning = Text::from(
+                    r"DANGER!!!
+This will recover following snapshots to their related subvolumes.
+And replaced subvolumes will be moved to 'broken area'.
+
+Do not recover any subvolumes containing a whole OPERATING SYSTEMS in this way,
+and use an USB flash drive and recover via command line instead!!!
+
+",
+                );
+
+                app_tui::show_confirm_popup(
+                    frame,
+                    frame.area(),
+                    "Recover from the following snapshot?",
+                    Paragraph::new(
+                        warning
+                            .into_iter()
+                            .map(|x| x.style(globals::WARNING_COLOR).bold().italic())
+                            .chain(Text::from(msg.as_str()))
+                            .collect::<Vec<Line<'_>>>(),
+                    ),
+                    true,
+                    true,
                 );
             }
             SnapshotUIFocus::NoSubvolWarning => {
@@ -161,6 +193,7 @@ impl SnapshotsUI {
                     frame.area(),
                     "No subvolumes included.",
                     Paragraph::new("The current group doesn't include any subvolumes"),
+                    false,
                     false,
                 );
             }
@@ -280,23 +313,43 @@ impl SnapshotsUI {
     /// returns whether the focus should be returned to menu
     pub fn handle_events(&mut self, event: AppEvent) -> CResult<bool> {
         // handle events if it's confirming currently
-        if let SnapshotUIFocus::ConfirmingDelete { index, .. } = self.focus {
-            use AppEvent::*;
-            match event {
-                Yes => {
-                    if let Some(mut group) =
-                        get_sel_group_mut(&self.btrfs_mgr, &self.selected_group)
-                    {
-                        group
-                            .delete_snapshot(index)
-                            .warning("Fail to delete snapshot")?;
+        match self.focus {
+            SnapshotUIFocus::ConfirmingDelete { index, .. } => {
+                use AppEvent::*;
+                match event {
+                    Yes => {
+                        if let Some(mut group) =
+                            get_sel_group_mut(&self.btrfs_mgr, &self.selected_group)
+                        {
+                            group
+                                .delete_snapshot(index)
+                                .warning("Fail to delete snapshot")?;
+                        }
+                        self.focus = SnapshotUIFocus::ManualSnapshot;
                     }
-                    self.focus = SnapshotUIFocus::ManualSnapshot;
+                    Escape | No => self.focus = SnapshotUIFocus::ManualSnapshot,
+                    _ => (),
                 }
-                Escape | No => self.focus = SnapshotUIFocus::ManualSnapshot,
-                _ => (),
+                return Ok(false);
             }
-            return Ok(false);
+            SnapshotUIFocus::ConfirmingRecover { index, .. } => {
+                use AppEvent::*;
+                match event {
+                    Yes => {
+                        if let Some(mut group) =
+                            get_sel_group_mut(&self.btrfs_mgr, &self.selected_group)
+                        {
+                            group.recover(index).warning("Fail to recover a snapshot")?;
+                            self.btrfs_mgr.borrow_mut().reload_snapshots()?;
+                        }
+                        self.focus = SnapshotUIFocus::ManualSnapshot;
+                    }
+                    Escape | No => self.focus = SnapshotUIFocus::ManualSnapshot,
+                    _ => (),
+                }
+                return Ok(false);
+            }
+            _ => (),
         }
 
         let table_state;
@@ -358,44 +411,85 @@ impl SnapshotsUI {
                     self.focus = SnapshotUIFocus::NoSubvolWarning
                 }
             }
-            Delete => {
-                if self.focus == SnapshotUIFocus::ManualSnapshot
-                    && let Some(i) = self.manual_snapshot_table_state.selected()
-                    && !self.manual_snapshot_infos.is_empty()
+            Delete => match self.focus {
+                SnapshotUIFocus::ManualSnapshot
+                    if let Some(i) = self.manual_snapshot_table_state.selected()
+                        && !self.manual_snapshot_infos.is_empty() =>
                 {
-                    let info = self
+                    let (index, date, time, subvols) = self
                         .manual_snapshot_infos
                         .get(i.clamp(0, self.manual_snapshot_infos.len() - 1))
                         .unwrap();
                     self.focus = SnapshotUIFocus::ConfirmingDelete {
                         msg: format!(
-                            "Type: {}\nData: {}\nTime: {}\nIncluded Subvolumes:\n  {}",
+                            "Type: {}\nDate: {}\nTime: {}\nIncluded Subvolumes:\n  {}",
                             SnapshotType::Manually,
-                            info.1,
-                            info.2,
-                            info.3.join("\n  "),
+                            date,
+                            time,
+                            subvols.join("\n  "),
                         ),
-                        index: info.0,
+                        index: *index,
                     };
-                } else if self.focus == SnapshotUIFocus::ScheduledSnapshot
-                    && let Some(i) = self.scheduled_snapshot_table_state.selected()
+                }
+                SnapshotUIFocus::ScheduledSnapshot
+                    if let Some(i) = self.scheduled_snapshot_table_state.selected() =>
                 {
-                    let info = self
+                    let (index, date, time, snapshot_type, subvols) = self
                         .scheduled_snapshot_infos
                         .get(i.clamp(0, self.scheduled_snapshot_infos.len() - 1))
                         .unwrap();
                     self.focus = SnapshotUIFocus::ConfirmingDelete {
                         msg: format!(
-                            "Type: {}\nData: {}\nTime: {}\nIncluded Subvolumes:\n  {}",
-                            info.1,
-                            info.2,
-                            info.3,
-                            info.4.join("\n  "),
+                            "Type: {}\nDate: {}\nTime: {}\nIncluded Subvolumes:\n  {}",
+                            snapshot_type,
+                            date,
+                            time,
+                            subvols.join("\n  "),
                         ),
-                        index: info.0,
+                        index: *index,
                     };
                 }
-            }
+                _ => (),
+            },
+
+            RenameOrRecover => match self.focus {
+                SnapshotUIFocus::ManualSnapshot
+                    if !self.manual_snapshot_infos.is_empty()
+                        && let Some(i) = self.manual_snapshot_table_state.selected()
+                        && let Some((index, date, time, subvols)) =
+                            self.manual_snapshot_infos.get(i) =>
+                {
+                    self.focus = SnapshotUIFocus::ConfirmingRecover {
+                        msg: format!(
+                            "Type: {}\nDate: {}\nTime: {}\nIncluded Subvolumes:\n  {}",
+                            SnapshotType::Manually,
+                            date,
+                            time,
+                            subvols.join("\n  "),
+                        ),
+                        index: *index,
+                    }
+                }
+                SnapshotUIFocus::ScheduledSnapshot
+                    if !self.scheduled_snapshot_infos.is_empty()
+                        && let Some(i) = self.scheduled_snapshot_table_state.selected()
+                        && let Some((index, date, time, snapshot_type, subvols)) =
+                            self.scheduled_snapshot_infos.get(i) =>
+                {
+                    self.focus = SnapshotUIFocus::ConfirmingRecover {
+                        msg: format!(
+                            "Type: {}\nDate: {}\nTime: {}\nIncluded Subvolumes:\n  {}",
+                            snapshot_type,
+                            date,
+                            time,
+                            subvols.join("\n  "),
+                        ),
+                        index: *index,
+                    }
+                }
+
+                _ => (),
+            },
             // TODO: here need implementation
             Enter => match self.focus {
                 SnapshotUIFocus::NoSubvolWarning => self.focus = SnapshotUIFocus::ManualSnapshot,
