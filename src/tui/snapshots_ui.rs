@@ -8,17 +8,11 @@ use ratatui::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{
-    core::error::CResult,
-    tui::{
-        app_tui::{self, AppEvent, get_body_color, get_sel_group, get_sel_group_mut},
-        menu::Menu,
-    },
-};
-use crate::{
-    core::{btrfs_manager::BtrfsManager, btrfs_objects::snapshot_type::SnapshotType},
-    globals,
-};
+use crate::core::error::CResult;
+use crate::core::{btrfs_manager::BtrfsManager, btrfs_objects::snapshot_type::SnapshotType};
+use crate::globals;
+use crate::tui::app_tui::{self, AppEvent, get_body_color, get_sel_group, get_sel_group_mut};
+use crate::tui::menu::Menu;
 
 #[derive(PartialEq)]
 enum SnapshotUIFocus {
@@ -209,13 +203,16 @@ impl SnapshotsUI {
                 Constraint::Percentage(30),
                 Constraint::Percentage(40),
             ];
-            let mut table = Table::new(rows, widths)
+            let table = Table::new(rows, widths)
                 .header(header)
                 .column_spacing(1)
+                .row_highlight_style(if focused {
+                    Modifier::REVERSED
+                } else {
+                    Modifier::empty()
+                })
                 .style(main_color);
-            if focused {
-                table = table.row_highlight_style(Modifier::REVERSED);
-            }
+
             frame.render_stateful_widget(
                 table.block(manual_block),
                 area,
@@ -262,13 +259,16 @@ impl SnapshotsUI {
                 Constraint::Percentage(20),
                 Constraint::Percentage(40),
             ];
-            let mut table = Table::new(rows, widths)
+            let table = Table::new(rows, widths)
                 .header(header)
                 .column_spacing(1)
+                .row_highlight_style(if focused {
+                    Modifier::REVERSED
+                } else {
+                    Modifier::empty()
+                })
                 .style(main_color);
-            if focused {
-                table = table.row_highlight_style(Modifier::REVERSED);
-            }
+
             frame.render_stateful_widget(
                 table.block(scheduled_block),
                 area,

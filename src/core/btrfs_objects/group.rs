@@ -3,6 +3,7 @@ use crate::core::btrfs_objects::snapshot_type::SnapshotType;
 use crate::core::error::{AppError, CResult, throw_invalid_index};
 use crate::core::utils::{exec_command, get_current_date_time, mount_point_join};
 use crate::globals;
+use color_eyre::Section;
 use serde::{Deserialize, Serialize};
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
@@ -158,7 +159,12 @@ impl Group {
         // remove relative directory if exist
         let group_dir = globals::SNAPSHOT_GROUP_DIR_PATH.join(self.group_name);
         if std::fs::exists(&group_dir)? {
-            std::fs::remove_dir_all(group_dir)?;
+            std::fs::remove_dir_all(&group_dir).with_warning(|| {
+                format!(
+                    "There might be readonly snapshots under '{}'",
+                    group_dir.to_string_lossy()
+                )
+            }).suggestion("You may need to run this program again(to mount the device)\nand delete it manually('sudo btrfs subvolume delete ...').")?;
         }
         Ok(())
     }

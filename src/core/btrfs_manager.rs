@@ -234,6 +234,11 @@ impl BtrfsManager {
     pub fn get_subvolumes(&self) -> &[PathBuf] {
         &self.subvolumes
     }
+
+    #[inline]
+    pub fn get_broken_snapshots(&self) -> &Vec<SubvolumeSnapshot> {
+        self.broken_snapshots.as_ref()
+    }
 }
 
 impl Drop for BtrfsManager {

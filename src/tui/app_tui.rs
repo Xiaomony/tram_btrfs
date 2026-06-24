@@ -10,8 +10,8 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
 use tui_input::Input;
 
-use crate::tui::menu::Menu;
 use crate::tui::snapshots_ui::SnapshotsUI;
+use crate::tui::{broken_snapshots_ui::BrokenSnapshotsUI, menu::Menu};
 use crate::{
     core::{btrfs_manager::BtrfsManager, btrfs_objects::group::Group, error::CResult},
     tui::subvolumes_ui::SubvolumesUI,
@@ -57,8 +57,9 @@ pub enum AppEvent {
 
 pub struct AppTUI {
     snapshots_ui: SnapshotsUI,
-    subvolumes_ui: SubvolumesUI,
     groups_ui: GroupsUI,
+    broken_snapshots_ui: BrokenSnapshotsUI,
+    subvolumes_ui: SubvolumesUI,
     menu_state: ListState,
     _btrfs_mgr: Rc<RefCell<BtrfsManager>>,
     /// the index of current selected snapshot group
@@ -72,8 +73,9 @@ impl AppTUI {
         let selected_group = Rc::new(RefCell::new(None));
         Self {
             snapshots_ui: SnapshotsUI::new(btrfs_mgr.clone(), selected_group.clone()),
-            subvolumes_ui: SubvolumesUI::new(btrfs_mgr.clone()),
             groups_ui: GroupsUI::new(btrfs_mgr.clone(), selected_group.clone()),
+            broken_snapshots_ui: BrokenSnapshotsUI::new(btrfs_mgr.clone()),
+            subvolumes_ui: SubvolumesUI::new(btrfs_mgr.clone()),
             menu_state: ListState::default().with_selected(Some(0)),
             _btrfs_mgr: btrfs_mgr,
             _selected_group: selected_group,
@@ -136,7 +138,10 @@ impl AppTUI {
             Subvolumes => self
                 .subvolumes_ui
                 .render(frame, horizontal_layout[1], focused),
-            BrokenSnapshots => (),
+            BrokenSnapshots => {
+                self.broken_snapshots_ui
+                    .render(frame, horizontal_layout[1], focused)
+            }
             Settings => (),
         }
     }
@@ -197,7 +202,7 @@ impl AppTUI {
                             return_focus
                         }
                         Subvolumes => self.subvolumes_ui.handle_events(app_event)?,
-                        BrokenSnapshots => false,
+                        BrokenSnapshots => self.broken_snapshots_ui.handle_events(app_event)?,
                         Settings => false,
                     } {
                         self.focus = AppFocus::Menu;

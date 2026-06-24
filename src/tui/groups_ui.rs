@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Margin, Rect},
     style::{Modifier, Stylize},
     text::Line,
-    widgets::{Block, BorderType, List, ListState, Paragraph, Row, Table, TableState},
+    widgets::{Block, BorderType, List, ListState, Padding, Paragraph, Row, Table, TableState},
 };
 use std::{cell::RefCell, rc::Rc};
 use tui_input::{Input, backend::crossterm::EventHandler};
@@ -57,8 +57,8 @@ impl GroupsUI {
 
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         let [groups_area, groupinfo_area] = area.layout(&Layout::vertical([
-            Constraint::Percentage(60),
-            Constraint::Percentage(40),
+            Constraint::Percentage(45),
+            Constraint::Percentage(55),
         ]));
 
         self.render_group_table(frame, focused, groups_area);
@@ -114,6 +114,7 @@ May caused by one of the following reasons:
         let groups_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .title(Menu::Groups)
+            .padding(Padding::uniform(1))
             .title_alignment(Alignment::Center);
 
         let group_rows: Vec<Row> = mgr
@@ -166,6 +167,7 @@ May caused by one of the following reasons:
     fn render_group_info(&mut self, frame: &mut Frame, body_focused: bool, area: Rect) {
         let groupinfo_block = Block::bordered()
             .border_type(BorderType::Rounded)
+            .padding(Padding::uniform(1))
             .title("  Group Info ")
             .title_alignment(Alignment::Center)
             .style(get_body_color(

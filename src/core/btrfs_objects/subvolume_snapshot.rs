@@ -1,5 +1,5 @@
 use crate::core::utils::mount_point_join;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 /// Snapshots of a single subvolume
@@ -31,5 +31,10 @@ impl SubvolumeSnapshot {
     /// or the subvolume path is not a valid UTF-8 string
     pub fn get_relate_subvolume_path(&self) -> Option<&str> {
         self.related_subvolume.as_ref().and_then(|x| x.to_str())
+    }
+
+    #[inline]
+    pub fn get_path(&self) -> &Path {
+        &self.path
     }
 }
