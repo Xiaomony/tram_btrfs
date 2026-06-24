@@ -158,6 +158,7 @@ impl BtrfsManager {
     ///    Otherwise the broken snapshots won't show properly.
     pub fn reload_snapshots(&mut self) -> CResult<()> {
         self.subvolumes.clear();
+        self.broken_snapshots.clear();
         self.app_config
             .groups
             .iter_mut()

@@ -21,13 +21,28 @@ enum SnapshotUIFocus {
     ConfirmingDelete {
         msg: String,
         index: usize,
+        /// whether the focus is in manual snapshots table before entering confirming
+        prev_focus_manual: bool,
     },
     ConfirmingRecover {
         msg: String,
         index: usize,
+        /// whether the focus is in manual snapshots table before entering confirming
+        prev_focus_manual: bool,
     },
     /// show a warning when attempting to create snapshot while no subvolumes included
     NoSubvolWarning,
+}
+
+impl SnapshotUIFocus {
+    #[inline]
+    pub fn get_previous_focus(prev_focus_manual: bool) -> Self {
+        if prev_focus_manual {
+            SnapshotUIFocus::ManualSnapshot
+        } else {
+            SnapshotUIFocus::ScheduledSnapshot
+        }
+    }
 }
 
 pub struct SnapshotsUI {
@@ -314,7 +329,11 @@ and use an USB flash drive and recover via command line instead!!!
     pub fn handle_events(&mut self, event: AppEvent) -> CResult<bool> {
         // handle events if it's confirming currently
         match self.focus {
-            SnapshotUIFocus::ConfirmingDelete { index, .. } => {
+            SnapshotUIFocus::ConfirmingDelete {
+                index,
+                prev_focus_manual,
+                ..
+            } => {
                 use AppEvent::*;
                 match event {
                     Yes => {
@@ -325,26 +344,40 @@ and use an USB flash drive and recover via command line instead!!!
                                 .delete_snapshot(index)
                                 .warning("Fail to delete snapshot")?;
                         }
-                        self.focus = SnapshotUIFocus::ManualSnapshot;
+                        self.focus = SnapshotUIFocus::get_previous_focus(prev_focus_manual);
                     }
-                    Escape | No => self.focus = SnapshotUIFocus::ManualSnapshot,
+                    Escape | No => {
+                        self.focus = SnapshotUIFocus::get_previous_focus(prev_focus_manual)
+                    }
                     _ => (),
                 }
                 return Ok(false);
             }
-            SnapshotUIFocus::ConfirmingRecover { index, .. } => {
+            SnapshotUIFocus::ConfirmingRecover {
+                index,
+                prev_focus_manual,
+                ..
+            } => {
                 use AppEvent::*;
                 match event {
                     Yes => {
+                        let mut succeed = false;
                         if let Some(mut group) =
                             get_sel_group_mut(&self.btrfs_mgr, &self.selected_group)
                         {
                             group.recover(index).warning("Fail to recover a snapshot")?;
+                            succeed = true;
+                        }
+                        // can't borrow btrfs_mgr twice, therefore add a bool flag
+                        if succeed {
                             self.btrfs_mgr.borrow_mut().reload_snapshots()?;
                         }
-                        self.focus = SnapshotUIFocus::ManualSnapshot;
+                        self.focus = SnapshotUIFocus::get_previous_focus(prev_focus_manual);
                     }
-                    Escape | No => self.focus = SnapshotUIFocus::ManualSnapshot,
+                    Escape | No => {
+                        self.focus = SnapshotUIFocus::get_previous_focus(prev_focus_manual)
+                    }
+
                     _ => (),
                 }
                 return Ok(false);
@@ -411,6 +444,19 @@ and use an USB flash drive and recover via command line instead!!!
                     self.focus = SnapshotUIFocus::NoSubvolWarning
                 }
             }
+            #[cfg(debug_assertions)]
+            Create
+                if self.focus == SnapshotUIFocus::ScheduledSnapshot
+                    && let Some(mut group) =
+                        get_sel_group_mut(&self.btrfs_mgr, &self.selected_group) =>
+            {
+                if !group
+                    .create_snapshot(SnapshotType::Daily)
+                    .warning("Fail to create new snapshot.")?
+                {
+                    self.focus = SnapshotUIFocus::NoSubvolWarning
+                }
+            }
             Delete => match self.focus {
                 SnapshotUIFocus::ManualSnapshot
                     if let Some(i) = self.manual_snapshot_table_state.selected()
@@ -429,6 +475,7 @@ and use an USB flash drive and recover via command line instead!!!
                             subvols.join("\n  "),
                         ),
                         index: *index,
+                        prev_focus_manual: true,
                     };
                 }
                 SnapshotUIFocus::ScheduledSnapshot
@@ -447,6 +494,7 @@ and use an USB flash drive and recover via command line instead!!!
                             subvols.join("\n  "),
                         ),
                         index: *index,
+                        prev_focus_manual: false,
                     };
                 }
                 _ => (),
@@ -468,6 +516,7 @@ and use an USB flash drive and recover via command line instead!!!
                             subvols.join("\n  "),
                         ),
                         index: *index,
+                        prev_focus_manual: true,
                     }
                 }
                 SnapshotUIFocus::ScheduledSnapshot
@@ -485,6 +534,7 @@ and use an USB flash drive and recover via command line instead!!!
                             subvols.join("\n  "),
                         ),
                         index: *index,
+                        prev_focus_manual: false,
                     }
                 }
 

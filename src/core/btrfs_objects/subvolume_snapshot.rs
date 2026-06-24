@@ -1,7 +1,7 @@
-use crate::core::{
-    error::CResult,
-    utils::{exec_command, mount_point_join},
-};
+use tracing::instrument;
+
+use crate::core::error::CResult;
+use crate::core::utils::{exec_command, mount_point_join};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
@@ -22,12 +22,17 @@ impl SubvolumeSnapshot {
     /// recover the subvolume from a snapshot
     /// and put the subvolume to the given `broken_snapshot_dir`
     /// return `false` if no subvolume related
-    pub fn recover(&self, broken_snapshot_dir: impl AsRef<Path>) -> CResult<bool> {
+    #[instrument]
+    pub fn recover(
+        &self,
+        broken_snapshot_dir: impl AsRef<Path> + std::fmt::Debug,
+    ) -> CResult<bool> {
         if let Some(ref subvol) = self.related_subvolume {
             // move the subvolume to the broken area
             let subvol_path = mount_point_join(subvol);
             let subvol_path_string = subvol_path.to_string_lossy().to_string();
-            let move_to_path = broken_snapshot_dir.as_ref().join(&self.path);
+            let move_to_path = broken_snapshot_dir.as_ref().join(subvol);
+            std::fs::create_dir_all(move_to_path.parent().unwrap())?;
             std::fs::rename(subvol_path, move_to_path)?;
 
             // 'snapshot' the snapshot to the path of original subvolume

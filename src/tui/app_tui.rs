@@ -286,7 +286,7 @@ pub fn show_confirm_popup(
     larger_popup_window: bool,
 ) {
     let centered_area = if larger_popup_window {
-        area.centered(Constraint::Percentage(70), Constraint::Percentage(70))
+        area.centered(Constraint::Percentage(55), Constraint::Percentage(55))
     } else {
         area.centered(Constraint::Percentage(40), Constraint::Percentage(40))
     };
