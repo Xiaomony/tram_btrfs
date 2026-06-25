@@ -1,6 +1,6 @@
 use tracing::instrument;
 
-use crate::core::error::CResult;
+use crate::core::error::{CResult, throw_bug};
 use crate::core::utils::{exec_command, mount_point_join};
 use std::path::{Path, PathBuf};
 
@@ -23,10 +23,7 @@ impl SubvolumeSnapshot {
     /// and put the subvolume to the given `broken_snapshot_dir`
     /// return `false` if no subvolume related
     #[instrument]
-    pub fn recover(
-        &self,
-        broken_snapshot_dir: impl AsRef<Path> + std::fmt::Debug,
-    ) -> CResult<bool> {
+    pub fn recover(&self, broken_snapshot_dir: impl AsRef<Path> + std::fmt::Debug) -> CResult<()> {
         if let Some(ref subvol) = self.related_subvolume {
             // move the subvolume to the broken area
             let subvol_path = mount_point_join(subvol);
@@ -46,9 +43,12 @@ impl SubvolumeSnapshot {
                     subvol_path_string,
                 ],
             )?;
-            Ok(true)
+            Ok(())
         } else {
-            Ok(false)
+            throw_bug(format!(
+                "No related subvolume when recovering from snapshot: {}",
+                self.path.to_string_lossy()
+            ))
         }
     }
 
@@ -72,5 +72,10 @@ impl SubvolumeSnapshot {
     #[inline]
     pub fn get_path(&self) -> &Path {
         &self.path
+    }
+
+    #[inline]
+    pub fn has_related_subvol(&self) -> bool {
+        self.related_subvolume.is_some()
     }
 }

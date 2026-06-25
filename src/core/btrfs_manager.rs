@@ -1,15 +1,17 @@
 use color_eyre::Section;
 use file_lock::{FileLock, FileOptions};
 use regex::Regex;
+use std::cell::RefCell;
 use std::fs::create_dir_all;
 use std::path::PathBuf;
+use std::rc::Rc;
 use tracing::instrument;
 
 use crate::core::app_config::AppConfig;
 use crate::core::btrfs_objects::group::Group;
 use crate::core::btrfs_objects::subvolume_snapshot::SubvolumeSnapshot;
 use crate::core::error::{AppError, CResult, throw_invalid_index};
-use crate::core::utils::*;
+use crate::core::utils::{self, *};
 use crate::globals;
 
 #[derive(Debug)]
@@ -135,7 +137,8 @@ impl BtrfsManager {
             && let Some(&snapshot_type) = path_parts.get(2)
             && let Some(&datetime) = path_parts.get(3)
             // get related subvolume path
-            && let related_subvolume_path = path_parts[4..].join("/")
+            && let Some(slice) = path_parts.get(4..)
+            && let related_subvolume_path = slice.join("/")
             && let Some(related_subvolume) = self.subvolumes.iter().find(|&x| x.eq(&related_subvolume_path))
         {
             if !group.add_snapshot(raw_path, snapshot_type, datetime, related_subvolume.clone()) {
@@ -145,6 +148,18 @@ impl BtrfsManager {
                     Some(related_subvolume.clone()),
                 ));
             }
+        } else if let Some(&globals::BROKEN_DIR_NAME) = path_parts.first()
+            && let Some(slice) = path_parts.get(2..)
+            && let related_subvolume_path = slice.join("/")
+            && let Some(related_subvolume) = self
+                .subvolumes
+                .iter()
+                .find(|&x| x.eq(&related_subvolume_path))
+        {
+            self.broken_snapshots.push(SubvolumeSnapshot::new(
+                raw_path,
+                Some(related_subvolume.clone()),
+            ));
         } else {
             // regard it as a broken snapshot without related subvolume
             self.broken_snapshots
@@ -218,6 +233,54 @@ impl BtrfsManager {
     }
 
     #[instrument]
+    /// Delete a broken snapshot and remove the directory if there're no snapshots under it
+    pub fn delete_broken_snapshot(&mut self, index: usize) -> CResult<()> {
+        if index >= self.broken_snapshots.len() {
+            return throw_invalid_index(index, "deleting broken snapshot");
+        }
+
+        let full_path = self.broken_snapshots.remove(index).get_fullpath();
+        exec_command(
+            "btrfs",
+            [
+                "subvolume".to_string(),
+                "delete".to_string(),
+                full_path.to_string_lossy().to_string(),
+            ],
+        )?;
+
+        for x in std::fs::read_dir(&*globals::BROKEN_SNAPSHOTS_DIR_PATH)? {
+            let x = x?;
+            if x.file_type()?.is_dir()
+                && let x_path = x.path()
+                && self
+                    .broken_snapshots
+                    .iter()
+                    .all(|y| !y.get_fullpath().starts_with(&x_path))
+            {
+                std::fs::remove_dir_all(x_path)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    #[instrument]
+    pub fn recover_broken_snapshot(&mut self, index: usize) -> CResult<()> {
+        let Some(broken_snapshot) = self.broken_snapshots.get(index) else {
+            return throw_invalid_index(index, "recovering broken snapshot");
+        };
+
+        let (data, time) = utils::get_current_date_time();
+        let data_time = format!("{data}_{time}");
+        let broken_snapshot_dir = (*globals::BROKEN_SNAPSHOTS_DIR_PATH).join(data_time);
+        std::fs::create_dir_all(&broken_snapshot_dir)?;
+
+        broken_snapshot.recover(broken_snapshot_dir)?;
+        self.reload_snapshots()
+    }
+
+    #[instrument]
     #[inline]
     pub fn delete_group(&mut self, index: usize) -> CResult<()> {
         self.app_config.delete_group(index)
@@ -241,6 +304,11 @@ impl BtrfsManager {
     #[inline]
     pub fn get_broken_snapshots(&self) -> &Vec<SubvolumeSnapshot> {
         self.broken_snapshots.as_ref()
+    }
+
+    #[inline]
+    pub fn get_sel_group(&self) -> Rc<RefCell<Option<usize>>> {
+        self.app_config.get_sel_group()
     }
 }
 

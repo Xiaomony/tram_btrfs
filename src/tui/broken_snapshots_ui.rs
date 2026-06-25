@@ -16,9 +16,16 @@ use crate::{
     },
 };
 
+enum BrokenSnapshotsFocus {
+    BrokenSnapshotList,
+    ConfirmingDeleting { index: usize, msg: String },
+    ConfirmingRecovering { index: usize, msg: String },
+}
+
 pub struct BrokenSnapshotsUI {
     btrfs_mgr: Rc<RefCell<BtrfsManager>>,
     broken_snapshot_table_state: TableState,
+    focus: BrokenSnapshotsFocus,
 }
 
 impl BrokenSnapshotsUI {
@@ -26,6 +33,7 @@ impl BrokenSnapshotsUI {
         Self {
             btrfs_mgr,
             broken_snapshot_table_state: TableState::new().with_selected(None),
+            focus: BrokenSnapshotsFocus::BrokenSnapshotList,
         }
     }
 
@@ -94,17 +102,80 @@ They may have related subvolumes or not.",
             .style(color);
 
         frame.render_stateful_widget(table, bottom_area, &mut self.broken_snapshot_table_state);
+
+        match self.focus {
+            BrokenSnapshotsFocus::ConfirmingDeleting { ref msg, .. } => {
+                app_tui::show_confirm_popup(
+                    frame,
+                    frame.area(),
+                    "Delete the following snapshot?",
+                    Paragraph::new(msg.as_str()),
+                    true,
+                    false,
+                )
+            }
+            BrokenSnapshotsFocus::ConfirmingRecovering { ref msg, .. } => {
+                app_tui::show_confirm_popup(
+                    frame,
+                    frame.area(),
+                    "DANGER!! Recover from the following broken snapshot?",
+                    Paragraph::new(msg.as_str()),
+                    true,
+                    false,
+                )
+            }
+            _ => (),
+        }
     }
 
     pub fn handle_events(&mut self, event: AppEvent) -> CResult<bool> {
         use AppEvent::*;
-        match event {
-            Up => self.broken_snapshot_table_state.select_previous(),
-            Down => self.broken_snapshot_table_state.select_next(),
-            Top => self.broken_snapshot_table_state.select_first(),
-            Bottom => self.broken_snapshot_table_state.select_last(),
-            Left | WindowLeft | Escape => return Ok(true),
-            _ => (),
+
+        match self.focus {
+            BrokenSnapshotsFocus::ConfirmingDeleting { index, .. } => match event {
+                Yes => {
+                    self.focus = BrokenSnapshotsFocus::BrokenSnapshotList;
+                    self.btrfs_mgr.borrow_mut().delete_broken_snapshot(index)?;
+                }
+                No => self.focus = BrokenSnapshotsFocus::BrokenSnapshotList,
+                _ => (),
+            },
+            BrokenSnapshotsFocus::ConfirmingRecovering { index, .. } => match event {
+                Yes => {
+                    self.focus = BrokenSnapshotsFocus::BrokenSnapshotList;
+                    self.btrfs_mgr.borrow_mut().recover_broken_snapshot(index)?;
+                }
+                No => self.focus = BrokenSnapshotsFocus::BrokenSnapshotList,
+                _ => (),
+            },
+            BrokenSnapshotsFocus::BrokenSnapshotList => match event {
+                Up => self.broken_snapshot_table_state.select_previous(),
+                Down => self.broken_snapshot_table_state.select_next(),
+                Top => self.broken_snapshot_table_state.select_first(),
+                Bottom => self.broken_snapshot_table_state.select_last(),
+                Left | WindowLeft | Escape => return Ok(true),
+                Delete | RenameOrRecover
+                    if let Some(i) = self.broken_snapshot_table_state.selected()
+                        && !self.btrfs_mgr.borrow().get_broken_snapshots().is_empty() =>
+                {
+                    let mgr = self.btrfs_mgr.borrow();
+                    let brokens = mgr.get_broken_snapshots();
+                    let i = i.clamp(0, brokens.len() - 1);
+                    let obj = brokens.get(i).unwrap();
+                    let msg = format!(
+                        "Path:\n  {}\nRelated Subvolume:\n  {}",
+                        obj.get_path().to_string_lossy(),
+                        obj.get_relate_subvolume_path()
+                            .unwrap_or("No related subvolume")
+                    );
+                    if event == Delete {
+                        self.focus = BrokenSnapshotsFocus::ConfirmingDeleting { index: i, msg };
+                    } else if obj.has_related_subvol() {
+                        self.focus = BrokenSnapshotsFocus::ConfirmingRecovering { index: i, msg };
+                    }
+                }
+                _ => (),
+            },
         }
         Ok(false)
     }

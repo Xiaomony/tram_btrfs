@@ -62,24 +62,24 @@ pub struct AppTUI {
     broken_snapshots_ui: BrokenSnapshotsUI,
     subvolumes_ui: SubvolumesUI,
     menu_state: ListState,
-    _btrfs_mgr: Rc<RefCell<BtrfsManager>>,
+    btrfs_mgr: Rc<RefCell<BtrfsManager>>,
     /// the index of current selected snapshot group
-    _selected_group: Rc<RefCell<Option<usize>>>,
+    selected_group: Rc<RefCell<Option<usize>>>,
     focus: AppFocus,
     is_inputing: bool,
 }
 
 impl AppTUI {
     pub fn new(btrfs_mgr: Rc<RefCell<BtrfsManager>>) -> Self {
-        let selected_group = Rc::new(RefCell::new(None));
+        let selected_group = btrfs_mgr.borrow().get_sel_group();
         Self {
             snapshots_ui: SnapshotsUI::new(btrfs_mgr.clone(), selected_group.clone()),
             groups_ui: GroupsUI::new(btrfs_mgr.clone(), selected_group.clone()),
             broken_snapshots_ui: BrokenSnapshotsUI::new(btrfs_mgr.clone()),
             subvolumes_ui: SubvolumesUI::new(btrfs_mgr.clone()),
             menu_state: ListState::default().with_selected(Some(0)),
-            _btrfs_mgr: btrfs_mgr,
-            _selected_group: selected_group,
+            btrfs_mgr,
+            selected_group,
             focus: AppFocus::Menu,
             is_inputing: false,
         }
@@ -102,7 +102,7 @@ impl AppTUI {
             .style(main_color)
             .highlight_style(Modifier::REVERSED);
 
-        if let Some(crr_group) = get_sel_group(&self._btrfs_mgr, &self._selected_group) {
+        if let Some(crr_group) = get_sel_group(&self.btrfs_mgr, &self.selected_group) {
             let vert_layout = Layout::vertical([Constraint::Fill(1), Constraint::Length(2)])
                 .split(menu_block.inner(area));
             let crr_group_prompt = Paragraph::new(vec![

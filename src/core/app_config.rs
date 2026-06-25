@@ -3,8 +3,10 @@ use crate::core::error::{CResult, throw_invalid_index};
 use crate::globals;
 use color_eyre::Section;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::fs::{self, create_dir_all};
 use std::path::PathBuf;
+use std::rc::Rc;
 use tracing::instrument;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -30,6 +32,7 @@ impl AutoSnapshotSchedule {
 pub struct AppConfig {
     schedule: AutoSnapshotSchedule,
     pub groups: Vec<Group>,
+    selected_group: Rc<RefCell<Option<usize>>>,
     #[serde(skip, default)]
     first_time_launch: bool,
 }
@@ -48,6 +51,7 @@ impl AppConfig {
             let config = Self {
                 schedule: AutoSnapshotSchedule::new_default(),
                 groups: Vec::new(),
+                selected_group: Rc::new(RefCell::new(None)),
                 first_time_launch: true,
             };
             config.write_config()?;
@@ -133,6 +137,11 @@ impl AppConfig {
     pub fn change_schedule(&mut self, new_schedule: AutoSnapshotSchedule) -> CResult<()> {
         self.schedule = new_schedule;
         self.write_config()
+    }
+
+    #[inline]
+    pub fn get_sel_group(&self) -> Rc<RefCell<Option<usize>>> {
+        self.selected_group.clone()
     }
 }
 
