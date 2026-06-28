@@ -6,6 +6,7 @@ use ratatui::{
     style::{Modifier, Style, Stylize},
     widgets::{Block, BorderType, Padding, Paragraph, Row, Table, TableState, Wrap},
 };
+use tracing::instrument;
 
 use crate::{
     core::{btrfs_manager::BtrfsManager, error::CResult},
@@ -16,12 +17,14 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
 enum BrokenSnapshotsFocus {
     BrokenSnapshotList,
     ConfirmingDeleting { index: usize, msg: String },
     ConfirmingRecovering { index: usize, msg: String },
 }
 
+#[derive(Debug)]
 pub struct BrokenSnapshotsUI {
     btrfs_mgr: Rc<RefCell<BtrfsManager>>,
     broken_snapshot_table_state: TableState,
@@ -128,6 +131,7 @@ They may have related subvolumes or not.",
         }
     }
 
+    #[instrument]
     pub fn handle_events(&mut self, event: AppEvent) -> CResult<bool> {
         use AppEvent::*;
 

@@ -8,6 +8,7 @@ use ratatui::{
 };
 use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
+use tracing::instrument;
 use tui_input::Input;
 
 use crate::tui::snapshots_ui::SnapshotsUI;
@@ -18,14 +19,14 @@ use crate::{
 };
 use crate::{globals, tui::groups_ui::GroupsUI};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum AppFocus {
     Menu,
     Body,
     KeyPrompt,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum AppEvent {
     // Navigate
     Up,
@@ -56,6 +57,7 @@ pub enum AppEvent {
     Other, // reserved for input mode
 }
 
+#[derive(Debug)]
 pub struct AppTUI {
     snapshots_ui: SnapshotsUI,
     groups_ui: GroupsUI,
@@ -179,6 +181,7 @@ impl AppTUI {
         }
     }
 
+    #[instrument]
     // returns whether the program should exit
     pub fn read_events(&mut self) -> CResult<bool> {
         let raw_event = event::read()?;

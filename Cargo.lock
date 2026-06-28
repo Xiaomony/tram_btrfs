@@ -1718,7 +1718,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tram"
+name = "tram_btrfs"
 version = "0.1.0"
 dependencies = [
  "color-eyre",

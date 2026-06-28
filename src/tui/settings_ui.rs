@@ -6,17 +6,19 @@ use ratatui::{
     widgets::{Block, BorderType, List, Padding, Paragraph, Row, Table, TableState},
 };
 use std::{cell::RefCell, rc::Rc};
+use tracing::instrument;
 
 use crate::core::{app_config::AutoSnapshotSchedule, btrfs_manager::BtrfsManager, error::CResult};
 use crate::tui::app_tui::{self, AppEvent};
 use crate::tui::menu::Menu;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum SettingsUIFocus {
     Settings,
     Instruction,
 }
 
+#[derive(Debug)]
 pub struct SettingsUI {
     btrfs_mgr: Rc<RefCell<BtrfsManager>>,
     settings_table_state: TableState,
@@ -136,6 +138,7 @@ impl SettingsUI {
         Paragraph::new(r"")
     }
 
+    #[instrument]
     pub fn handle_events(&mut self, event: AppEvent) -> CResult<bool> {
         use AppEvent::*;
         if self.focus == SettingsUIFocus::Instruction {

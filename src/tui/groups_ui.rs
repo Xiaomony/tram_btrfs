@@ -6,6 +6,7 @@ use ratatui::{
     widgets::{Block, BorderType, List, ListState, Padding, Paragraph, Row, Table, TableState},
 };
 use std::{cell::RefCell, rc::Rc};
+use tracing::instrument;
 use tui_input::{Input, backend::crossterm::EventHandler};
 
 use crate::tui::app_tui::{self, AppEvent, get_body_color};
@@ -15,7 +16,7 @@ use crate::{
     globals,
 };
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum GroupsUIFocus {
     GroupList,
     IncludedSubvols,
@@ -26,6 +27,7 @@ enum GroupsUIFocus {
     InvalidGroupNamePopup,
 }
 
+#[derive(Debug)]
 pub struct GroupsUI {
     btrfs_mgr: Rc<RefCell<BtrfsManager>>,
     /// the index of current selected snapshot group
@@ -313,6 +315,7 @@ May caused by one of the following reasons:
         }
     }
 
+    #[instrument]
     /// return a tuple containing
     /// (whether the focus is returned, is inputing)
     pub fn handle_events(

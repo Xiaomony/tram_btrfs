@@ -7,6 +7,8 @@ use ratatui::{
     widgets::{Block, BorderType, Padding, Paragraph, Row, Table, TableState},
 };
 use std::{cell::RefCell, rc::Rc};
+use time::OffsetDateTime;
+use tracing::instrument;
 
 use crate::core::error::CResult;
 use crate::core::{btrfs_manager::BtrfsManager, btrfs_objects::snapshot_type::SnapshotType};
@@ -14,7 +16,7 @@ use crate::globals;
 use crate::tui::app_tui::{self, AppEvent, get_body_color, get_sel_group, get_sel_group_mut};
 use crate::tui::menu::Menu;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum SnapshotUIFocus {
     ManualSnapshot,
     ScheduledSnapshot,
@@ -32,6 +34,7 @@ enum SnapshotUIFocus {
     },
     /// show a warning when attempting to create snapshot while no subvolumes included
     NoSubvolWarning,
+    CreateSnapshotsTooFastWarning,
 }
 
 impl SnapshotUIFocus {
@@ -45,6 +48,7 @@ impl SnapshotUIFocus {
     }
 }
 
+#[derive(Debug)]
 pub struct SnapshotsUI {
     btrfs_mgr: Rc<RefCell<BtrfsManager>>,
     manual_snapshot_table_state: TableState,
@@ -57,6 +61,10 @@ pub struct SnapshotsUI {
     /// `(index, date, time, type, subvolumes)`
     scheduled_snapshot_infos: Vec<(usize, String, String, String, Vec<String>)>,
     no_valid_group: bool,
+    /// record the time when last snapshot was created
+    /// check the time when creating a new one to prevent creating a same directory
+    /// this should be created from `OffsetDateTime::now_utc().unix_timestamp()`
+    last_snapshot_create_time: i64,
 }
 
 impl SnapshotsUI {
@@ -73,6 +81,7 @@ impl SnapshotsUI {
             manual_snapshot_infos: Vec::new(),
             scheduled_snapshot_infos: Vec::new(),
             no_valid_group: false,
+            last_snapshot_create_time: OffsetDateTime::now_utc().unix_timestamp(),
         };
         new_obj.refresh_table_data();
         new_obj
@@ -206,8 +215,20 @@ and use an USB flash drive and recover via command line instead!!!
                 app_tui::show_confirm_popup(
                     frame,
                     frame.area(),
-                    "No subvolumes included.",
+                    "No subvolumes included",
                     Paragraph::new("The current group doesn't include any subvolumes"),
+                    false,
+                    false,
+                );
+            }
+            SnapshotUIFocus::CreateSnapshotsTooFastWarning => {
+                app_tui::show_confirm_popup(
+                    frame,
+                    frame.area(),
+                    "Creating Snapshot too Fast",
+                    Paragraph::new(
+                        "It seems that you're creating more than one snapshot within a second.\n\nGive it a second :)",
+                    ),
                     false,
                     false,
                 );
@@ -325,10 +346,17 @@ and use an USB flash drive and recover via command line instead!!!
         };
     }
 
+    #[instrument]
     /// returns whether the focus should be returned to menu
     pub fn handle_events(&mut self, event: AppEvent) -> CResult<bool> {
         // handle events if it's confirming currently
         match self.focus {
+            SnapshotUIFocus::NoSubvolWarning | SnapshotUIFocus::CreateSnapshotsTooFastWarning => {
+                if event == Enter {
+                    self.focus = SnapshotUIFocus::ManualSnapshot;
+                }
+                return Ok(false);
+            }
             SnapshotUIFocus::ConfirmingDelete {
                 index,
                 prev_focus_manual,
@@ -437,11 +465,18 @@ and use an USB flash drive and recover via command line instead!!!
                     && let Some(mut group) =
                         get_sel_group_mut(&self.btrfs_mgr, &self.selected_group) =>
             {
-                if !group
-                    .create_snapshot(SnapshotType::Manually)
-                    .warning("Fail to create new snapshot.")?
-                {
-                    self.focus = SnapshotUIFocus::NoSubvolWarning
+                let now = OffsetDateTime::now_utc().unix_timestamp();
+                if self.last_snapshot_create_time == now {
+                    self.focus = SnapshotUIFocus::CreateSnapshotsTooFastWarning;
+                } else {
+                    if group
+                        .create_snapshot(SnapshotType::Manually)
+                        .warning("Fail to create new snapshot.")?
+                    {
+                        self.last_snapshot_create_time = now;
+                    } else {
+                        self.focus = SnapshotUIFocus::NoSubvolWarning;
+                    }
                 }
             }
             #[cfg(debug_assertions)]
@@ -542,7 +577,6 @@ and use an USB flash drive and recover via command line instead!!!
             },
             // TODO: here need implementation
             Enter => match self.focus {
-                SnapshotUIFocus::NoSubvolWarning => self.focus = SnapshotUIFocus::ManualSnapshot,
                 SnapshotUIFocus::ManualSnapshot => todo!(),
                 SnapshotUIFocus::ScheduledSnapshot => todo!(),
                 _ => (),

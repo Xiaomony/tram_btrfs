@@ -1,5 +1,5 @@
 [package]
-name = "tram"
+name = "tram_btrfs"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,11 +8,11 @@ color-eyre = "0.6.5"
 crossterm = "0.29.0"
 file-lock = "2.1.11"
 nix = { version = "0.31.3", features = ["mount", "user"] }
-ratatui = "0.30.1"
+ratatui = "0.30.2"
 regex = "1.12.4"
 serde = { version = "1.0.228", features = ["derive", "rc", "std"] }
 thiserror = "2.0.18"
-time = { version = "0.3.47", features = ["formatting", "local-offset", "macros"] }
+time = { version = "0.3.51", features = ["formatting", "local-offset", "macros"] }
 toml = "1.1.2"
 tracing = "0.1.44"
 tracing-error = "0.2.1"
