@@ -120,18 +120,18 @@ impl SnapshotsUI {
     pub fn render(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
         self.refresh_table_data();
         if self.no_valid_group {
-            let lines: Vec<Line<'static>> = vec![
-                Menu::Snapshots
-                    .as_ref()
-                    .bold()
-                    .italic()
-                    .patch_style(globals::BODY_COLOR)
-                    .into(),
-                "No groups. Please create one.".into(),
-            ];
+            let block = Block::bordered()
+                .border_type(BorderType::Rounded)
+                .style(app_tui::get_body_color(focused))
+                .padding(Padding::uniform(1))
+                .title(Menu::Snapshots.as_ref().bold().italic())
+                .title_alignment(HorizontalAlignment::Center);
             frame.render_widget(
-                Paragraph::new(lines).alignment(Alignment::Center),
-                area.centered_vertically(Constraint::Length(2)),
+                Paragraph::new("No groups. Please create one.")
+                    .style(globals::WARNING_COLOR)
+                    .alignment(Alignment::Center)
+                    .block(block),
+                area,
             );
             return;
         }
@@ -352,7 +352,7 @@ and use an USB flash drive and recover via command line instead!!!
         // handle events if it's confirming currently
         match self.focus {
             SnapshotUIFocus::NoSubvolWarning | SnapshotUIFocus::CreateSnapshotsTooFastWarning => {
-                if event == Enter {
+                if event == Enter || event == Escape {
                     self.focus = SnapshotUIFocus::ManualSnapshot;
                 }
                 return Ok(false);

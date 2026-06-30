@@ -325,211 +325,170 @@ May caused by one of the following reasons:
     ) -> CResult<(bool, bool)> {
         use AppEvent::*;
 
-        if matches!(
-            self.focus,
-            GroupsUIFocus::CreateGroupInputing | GroupsUIFocus::RenameGroupInputing { .. }
-        ) {
-            match event {
-                Escape => self.focus = GroupsUIFocus::GroupList,
+        match self.focus {
+            GroupsUIFocus::CreateGroupInputing | GroupsUIFocus::RenameGroupInputing { .. } => {
+                match event {
+                    Escape => self.focus = GroupsUIFocus::GroupList,
 
-                Enter => {
-                    let succeed = match self.focus {
-                        GroupsUIFocus::CreateGroupInputing => {
-                            let new_name = self.input.value();
-                            self.btrfs_mgr.borrow_mut().add_group(new_name)?
+                    Enter => {
+                        let succeed = match self.focus {
+                            GroupsUIFocus::CreateGroupInputing => {
+                                let new_name = self.input.value();
+                                self.btrfs_mgr.borrow_mut().add_group(new_name)?
+                            }
+                            GroupsUIFocus::RenameGroupInputing { index } => self
+                                .btrfs_mgr
+                                .borrow_mut()
+                                .rename_group(index, self.input.value())?,
+                            _ => true,
+                        };
+                        if succeed {
+                            self.focus = GroupsUIFocus::GroupList;
+                        } else {
+                            self.focus = GroupsUIFocus::InvalidGroupNamePopup;
                         }
-                        GroupsUIFocus::RenameGroupInputing { index } => self
-                            .btrfs_mgr
-                            .borrow_mut()
-                            .rename_group(index, self.input.value())?,
-                        _ => true,
-                    };
-                    if succeed {
-                        self.focus = GroupsUIFocus::GroupList;
-                    } else {
-                        self.focus = GroupsUIFocus::InvalidGroupNamePopup;
+                    }
+                    _ => {
+                        self.input.handle_event(&raw_event);
+                        return Ok((false, true));
                     }
                 }
-                _ => {
-                    self.input.handle_event(&raw_event);
+                return Ok((false, false));
+            }
+            GroupsUIFocus::GroupList => match event {
+                Left => return Ok((true, false)),
+                WindowLeft | Escape => return Ok((true, false)),
+                WindowDown => self.focus = GroupsUIFocus::IncludedSubvols,
+                Up => self.group_list_table_state.select_previous(),
+                Down => self.group_list_table_state.select_next(),
+                Top => self.group_list_table_state.select_first(),
+                Bottom => self.group_list_table_state.select_last(),
+                Enter => {
+                    let mgr = self.btrfs_mgr.borrow();
+                    let groups = mgr.get_groups();
+                    if !groups.is_empty()
+                        && let Some(focused_group_index) = self.group_list_table_state.selected()
+                    {
+                        *self.selected_group.borrow_mut() =
+                            Some(focused_group_index.clamp(0, groups.len() - 1));
+                    }
+                }
+                Delete => {
+                    let mgr = self.btrfs_mgr.borrow();
+                    if !mgr.get_groups().is_empty()
+                        && let Some(i) = self.group_list_table_state.selected()
+                    {
+                        let i = i.clamp(0, mgr.get_groups().len() - 1);
+                        let group = mgr.get_groups().get(i).unwrap();
+                        self.focus = GroupsUIFocus::DeleteGroup {
+                            msg: format!(
+                                "DANGER: this will delete the following group along with all its snapshots!\n\nGroup Name: {}\nSnapshot Count: {}\nIncluded Subvolumes:{}",
+                                group.get_name(),
+                                group.get_snapshots().len(),
+                                group
+                                    .get_subvolumes()
+                                    .iter()
+                                    .map(|x| x.to_string_lossy())
+                                    .fold(String::new(), |acc, y| acc + "\n  " + &y)
+                            ),
+                            index: i,
+                        };
+                    }
+                }
+                Create => {
+                    self.input.reset();
+                    self.focus = GroupsUIFocus::CreateGroupInputing;
                     return Ok((false, true));
                 }
-            }
-            return Ok((false, false));
-        }
-
-        match event {
-            Left => {
-                if self.focus == GroupsUIFocus::ExcludedSubvols {
-                    self.focus = GroupsUIFocus::IncludedSubvols;
-                } else {
-                    return Ok((true, false));
-                }
-            }
-            Right | WindowRight if self.focus == GroupsUIFocus::IncludedSubvols => {
-                self.focus = GroupsUIFocus::ExcludedSubvols;
-            }
-            WindowLeft if self.focus == GroupsUIFocus::ExcludedSubvols => {
-                self.focus = GroupsUIFocus::IncludedSubvols
-            }
-            WindowLeft | Escape => return Ok((true, false)),
-            WindowUp => self.focus = GroupsUIFocus::GroupList,
-            WindowDown => self.focus = GroupsUIFocus::IncludedSubvols,
-
-            Up => {
-                use GroupsUIFocus::*;
-                match self.focus {
-                    GroupList => self.group_list_table_state.select_previous(),
-                    IncludedSubvols
-                        if let Some(0) = self.included_subvols_list_state.selected() =>
+                RenameOrRecover => {
+                    let mgr = self.btrfs_mgr.borrow();
+                    let groups = mgr.get_groups();
+                    if let Some(index) = self.group_list_table_state.selected()
+                        && !groups.is_empty()
                     {
-                        self.focus = GroupList
+                        let index = index.clamp(0, groups.len() - 1);
+                        let old_name = groups.get(index).unwrap().get_name();
+                        self.input = Input::new(old_name.into());
+                        self.focus = GroupsUIFocus::RenameGroupInputing { index };
+                        return Ok((false, true));
                     }
-                    IncludedSubvols => self.included_subvols_list_state.select_previous(),
-                    ExcludedSubvols
-                        if let Some(0) = self.excluded_subvols_list_state.selected() =>
-                    {
-                        self.focus = GroupList
+                }
+                _ => (),
+            },
+            GroupsUIFocus::IncludedSubvols => match event {
+                Left => return Ok((true, false)),
+                Right | WindowRight => self.focus = GroupsUIFocus::ExcludedSubvols,
+                WindowLeft | Escape => return Ok((true, false)),
+                WindowUp => self.focus = GroupsUIFocus::GroupList,
+                Up => {
+                    if let Some(0) = self.included_subvols_list_state.selected() {
+                        self.focus = GroupsUIFocus::GroupList;
+                    } else {
+                        self.included_subvols_list_state.select_previous();
                     }
-                    ExcludedSubvols => self.excluded_subvols_list_state.select_previous(),
-                    _ => (),
                 }
-            }
-            Down => {
-                use GroupsUIFocus::*;
-                match self.focus {
-                    GroupList => self.group_list_table_state.select_next(),
-                    IncludedSubvols => self.included_subvols_list_state.select_next(),
-                    ExcludedSubvols => self.excluded_subvols_list_state.select_next(),
-                    _ => (),
-                }
-            }
-            Top => {
-                use GroupsUIFocus::*;
-                match self.focus {
-                    GroupList => self.group_list_table_state.select_first(),
-                    IncludedSubvols => self.included_subvols_list_state.select_first(),
-                    ExcludedSubvols => self.excluded_subvols_list_state.select_first(),
-                    _ => (),
-                }
-            }
-            Bottom => {
-                use GroupsUIFocus::*;
-                match self.focus {
-                    GroupList => self.group_list_table_state.select_last(),
-                    IncludedSubvols => self.included_subvols_list_state.select_last(),
-                    ExcludedSubvols => self.excluded_subvols_list_state.select_last(),
-                    _ => (),
-                }
-            }
-
-            Enter => {
-                use GroupsUIFocus::*;
-                match self.focus {
-                    GroupList => {
-                        let mgr = self.btrfs_mgr.borrow();
-                        let groups = mgr.get_groups();
-                        if !groups.is_empty()
-                            && let Some(focused_group_index) =
-                                self.group_list_table_state.selected()
-                        {
-                            *self.selected_group.borrow_mut() =
-                                Some(focused_group_index.clamp(0, groups.len() - 1));
-                        }
-                    }
-                    IncludedSubvols => {
-                        let mut mgr = self.btrfs_mgr.borrow_mut();
-                        let groups = mgr.get_groups();
-                        // let len = groups.len();
-                        if let Some(focused_group_index) = self
+                Down => self.included_subvols_list_state.select_next(),
+                Top => self.included_subvols_list_state.select_first(),
+                Bottom => self.included_subvols_list_state.select_last(),
+                Enter => {
+                    let mut mgr = self.btrfs_mgr.borrow_mut();
+                    let groups = mgr.get_groups();
+                    if !groups.is_empty()
+                        && let Some(focused_group_index) = self
                             .group_list_table_state
                             .selected()
                             .map(|x| x.clamp(0, groups.len() - 1))
-                        // .and_then(|x| groups.get_mut(x.clamp(0, len - 1)))
-                        // && !focused_group.get_subvolumes().is_empty()
                         && let Some(i) = self.included_subvols_list_state.selected()
-                        {
-                            mgr.remove_subvol_from_group(focused_group_index, i)?;
-                            // let i = i.clamp(0, focused_group.get_subvolumes().len() - 1),
-                            // focused_group.remove_subvolume()?;
-                        }
+                    {
+                        mgr.remove_subvol_from_group(focused_group_index, i)?;
                     }
-                    ExcludedSubvols => {
-                        let mut mgr = self.btrfs_mgr.borrow_mut();
-
-                        if !self.crr_focus_group_excluded_subvols.is_empty()
-                            && let Some(focused_group_index) = self
-                                .group_list_table_state
-                                .selected()
-                                .map(|x| x.clamp(0, mgr.get_groups().len() - 1))
-                            && let Some(i) = self.excluded_subvols_list_state.selected()
-                            && let Some(&subvol_index) = self
-                                .crr_focus_group_excluded_subvols
-                                .get(i.clamp(0, self.crr_focus_group_excluded_subvols.len() - 1))
-                        {
-                            mgr.add_subvol_to_group(focused_group_index, subvol_index)?;
-                        }
+                }
+                _ => (),
+            },
+            GroupsUIFocus::ExcludedSubvols => match event {
+                Left | WindowLeft => self.focus = GroupsUIFocus::IncludedSubvols,
+                Escape => return Ok((true, false)),
+                WindowUp => self.focus = GroupsUIFocus::GroupList,
+                Up => {
+                    if let Some(0) = self.excluded_subvols_list_state.selected() {
+                        self.focus = GroupsUIFocus::GroupList;
+                    } else {
+                        self.excluded_subvols_list_state.select_previous();
                     }
-                    InvalidGroupNamePopup => {
-                        self.focus = GroupList;
+                }
+                Down => self.excluded_subvols_list_state.select_next(),
+                Top => self.excluded_subvols_list_state.select_first(),
+                Bottom => self.excluded_subvols_list_state.select_last(),
+                Enter => {
+                    let mut mgr = self.btrfs_mgr.borrow_mut();
+                    if !mgr.get_groups().is_empty()
+                        && !self.crr_focus_group_excluded_subvols.is_empty()
+                        && let Some(focused_group_index) = self
+                            .group_list_table_state
+                            .selected()
+                            .map(|x| x.clamp(0, mgr.get_groups().len() - 1))
+                        && let Some(i) = self.excluded_subvols_list_state.selected()
+                        && let Some(&subvol_index) = self
+                            .crr_focus_group_excluded_subvols
+                            .get(i.clamp(0, self.crr_focus_group_excluded_subvols.len() - 1))
+                    {
+                        mgr.add_subvol_to_group(focused_group_index, subvol_index)?;
                     }
-                    _ => (),
                 }
-            }
-
-            Delete => {
-                let mgr = self.btrfs_mgr.borrow();
-                if self.focus == GroupsUIFocus::GroupList
-                    && !mgr.get_groups().is_empty()
-                    && let Some(i) = self.group_list_table_state.selected()
-                {
-                    let i = i.clamp(0, mgr.get_groups().len() - 1);
-                    let group = mgr.get_groups().get(i).unwrap();
-                    self.focus = GroupsUIFocus::DeleteGroup {
-                        msg: format!(
-                            "DANGER: this will delete the following group along with all its snapshots!\n\nGroup Name: {}\nSnapshot Count: {}\nIncluded Subvolumes:{}",
-                            group.get_name(),
-                            group.get_snapshots().len(),
-                            group
-                                .get_subvolumes()
-                                .iter()
-                                .map(|x| x.to_string_lossy())
-                                .fold(String::new(), |acc, y| acc + "\n  " + &y)
-                        ),
-                        index: i,
-                    };
+                _ => (),
+            },
+            GroupsUIFocus::DeleteGroup { index, .. } => match event {
+                Yes => {
+                    self.btrfs_mgr.borrow_mut().delete_group(index)?;
+                    self.focus = GroupsUIFocus::GroupList;
                 }
-            }
-
-            Yes if let GroupsUIFocus::DeleteGroup { index, .. } = self.focus => {
-                self.btrfs_mgr.borrow_mut().delete_group(index)?;
-                self.focus = GroupsUIFocus::GroupList;
-            }
-
-            No if let GroupsUIFocus::DeleteGroup { .. } = self.focus => {
-                self.focus = GroupsUIFocus::GroupList;
-            }
-
-            Create if self.focus == GroupsUIFocus::GroupList => {
-                self.input.reset();
-                self.focus = GroupsUIFocus::CreateGroupInputing;
-                return Ok((false, true));
-            }
-
-            RenameOrRecover if self.focus == GroupsUIFocus::GroupList => {
-                let mgr = self.btrfs_mgr.borrow();
-                let groups = mgr.get_groups();
-                if let Some(index) = self.group_list_table_state.selected()
-                    && !groups.is_empty()
-                {
-                    let index = index.clamp(0, groups.len() - 1);
-                    let old_name = groups.get(index).unwrap().get_name();
-                    self.input = Input::new(old_name.into());
-                    self.focus = GroupsUIFocus::RenameGroupInputing { index };
-                    return Ok((false, true));
-                }
-            }
-            _ => (),
+                No | Escape => self.focus = GroupsUIFocus::GroupList,
+                _ => (),
+            },
+            GroupsUIFocus::InvalidGroupNamePopup => match event {
+                Enter | Escape => self.focus = GroupsUIFocus::GroupList,
+                _ => (),
+            },
         }
         Ok((false, false))
     }
