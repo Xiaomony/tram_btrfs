@@ -1,0 +1,11 @@
+    This is a tool to help you manage your Btrfs snapshots. If you encounter any problems or want any new features, please open an issue on the GitHub: "https://github.com/Xiaomony/tram"
+
+    The snapshots are managed in "groups" which include the subvolumes you want to snapshot. You can create, rename, delete groups in the "Groups" window. If your device contains "@" and "@home" subvolumes, the program will prepare a "default" group the first time you launch it.
+
+    When restoring from a snapshot, the replaced subvolumes will be considered as a "broken snapshot" and placed at "Broken Snapshots" window. But never restore any snapshots containing a whole Linux system in this way. Use a USB flash drive and restore via command line instead!
+
+    The program will create a file at "~/.config/tram_btrfs/tram.toml" to store your configurations and settings. Also, it needs root permission to execute btrfs operations. Therefore, it's recommended to execute the program with "sudo -E tram_btrfs" to keep your environment variables so that the config file won't locate under "/root/.config/".
+
+    By default, the program will detect the device where your current Linux system locates at and detect all the snapshots under it. But you can also specify any Btrfs devices for the program to run on by "--device" flag("tram_btrfs --device /dev/nvme0n1p8" for example).
+
+    If you were using other btrfs manager like Timeshift, please delete all their snapshots before uninstalling them. Or it will be considered as subvolumes here.

@@ -23,8 +23,8 @@ the btrfs partion
             └── boot
 
 snapshot folder name format: yyyy-mm-dd_hh-MM-ss
-The application should take a snapshot before recover to a subvolume and place it at `tram_btrfs/broken/`
-The application should deny a request to recover a system subvolume
+The application should take a snapshot before restore to a subvolume and place it at `tram_btrfs/broken/`
+The application should deny a request to restore a system subvolume
 */
 pub const TOP_DIRECTORY_NAME: &str = "tram_btrfs/";
 pub const SNAPSHOT_GROUPS_DIR_NAME: &str = "snapshot_groups";
@@ -47,7 +47,7 @@ pub static CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         .join(TOP_DIRECTORY_NAME)
 });
 pub static MAIN_CONFIG_FILE_PATH: LazyLock<PathBuf> =
-    LazyLock::new(|| (*CONFIG_DIR).join("tram.toml"));
+    LazyLock::new(|| (*CONFIG_DIR).join("tram_btrfs.toml"));
 
 // TUI constants
 pub const MENU_ITEMS: [Menu; 4] = [

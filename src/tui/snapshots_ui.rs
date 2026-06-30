@@ -28,7 +28,7 @@ enum SnapshotUIFocus {
         /// whether the focus is in manual snapshots table before entering confirming
         prev_focus_manual: bool,
     },
-    ConfirmingRecover {
+    ConfirmingRestore {
         msg: String,
         index: usize,
         /// whether the focus is in manual snapshots table before entering confirming
@@ -199,14 +199,14 @@ impl SnapshotsUI {
                     false,
                 );
             }
-            SnapshotUIFocus::ConfirmingRecover { ref msg, .. } => {
+            SnapshotUIFocus::ConfirmingRestore { ref msg, .. } => {
                 let warning = Text::from(
                     r"DANGER!!!
-This will recover following snapshots to their related subvolumes.
+This will restore following snapshots to their related subvolumes.
 And replaced subvolumes will be moved to 'broken area'.
 
-Do not recover any subvolumes containing a whole OPERATING SYSTEMS in this way,
-and use an USB flash drive and recover via command line instead!!!
+Do not restore any subvolumes containing a whole OPERATING SYSTEMS in this way,
+and use an USB flash drive and restore via command line instead!!!
 
 ",
                 );
@@ -214,7 +214,7 @@ and use an USB flash drive and recover via command line instead!!!
                 app_tui::show_confirm_popup(
                     frame,
                     frame.area(),
-                    "Recover from the following snapshot?",
+                    "Restore from the following snapshot?",
                     Paragraph::new(
                         warning
                             .into_iter()
@@ -475,7 +475,7 @@ and use an USB flash drive and recover via command line instead!!!
                 }
                 return Ok(false);
             }
-            SnapshotUIFocus::ConfirmingRecover {
+            SnapshotUIFocus::ConfirmingRestore {
                 index,
                 prev_focus_manual,
                 ..
@@ -487,7 +487,7 @@ and use an USB flash drive and recover via command line instead!!!
                         if let Some(mut group) =
                             get_sel_group_mut(&self.btrfs_mgr, &self.selected_group)
                         {
-                            group.recover(index).warning("Fail to recover a snapshot")?;
+                            group.restore(index).warning("Fail to restore a snapshot")?;
                             succeed = true;
                         }
                         // can't borrow btrfs_mgr twice, therefore add a bool flag
@@ -651,14 +651,14 @@ and use an USB flash drive and recover via command line instead!!!
                 _ => (),
             },
 
-            RenameOrRecover => match self.focus {
+            RenameOrRestore => match self.focus {
                 SnapshotUIFocus::ManualSnapshot
                     if !self.manual_snapshot_infos.is_empty()
                         && let Some(i) = self.manual_snapshot_table_state.selected()
                         && let Some((index, date, time, subvols)) =
                             self.manual_snapshot_infos.get(i) =>
                 {
-                    self.focus = SnapshotUIFocus::ConfirmingRecover {
+                    self.focus = SnapshotUIFocus::ConfirmingRestore {
                         msg: format!(
                             "Type: {}\nDate: {}\nTime: {}\nIncluded Subvolumes:\n  {}",
                             SnapshotType::Manually,
@@ -676,7 +676,7 @@ and use an USB flash drive and recover via command line instead!!!
                         && let Some((index, date, time, snapshot_type, subvols)) =
                             self.scheduled_snapshot_infos.get(i) =>
                 {
-                    self.focus = SnapshotUIFocus::ConfirmingRecover {
+                    self.focus = SnapshotUIFocus::ConfirmingRestore {
                         msg: format!(
                             "Type: {}\nDate: {}\nTime: {}\nIncluded Subvolumes:\n  {}",
                             snapshot_type,
@@ -737,16 +737,16 @@ and use an USB flash drive and recover via command line instead!!!
                 vec![
                     (Create, "Create Snapshot"),
                     (Delete, "Delete Snapshot"),
-                    (RenameOrRecover, "Recover"),
+                    (RenameOrRestore, "Restore"),
                 ],
                 true,
             ),
             SnapshotUIFocus::ScheduledSnapshot => (
-                vec![(Delete, "Delete Snapshot"), (RenameOrRecover, "Recover")],
+                vec![(Delete, "Delete Snapshot"), (RenameOrRestore, "Restore")],
                 true,
             ),
             SnapshotUIFocus::ConfirmingDelete { .. }
-            | SnapshotUIFocus::ConfirmingRecover { .. } => {
+            | SnapshotUIFocus::ConfirmingRestore { .. } => {
                 (globals::YES_NO_PROMPTS.to_vec(), false)
             }
             SnapshotUIFocus::NoSubvolWarning | SnapshotUIFocus::CreateSnapshotsTooFastWarning => {

@@ -400,7 +400,7 @@ May caused by one of the following reasons:
                     self.focus = GroupsUIFocus::CreateGroupInputing;
                     return Ok((false, true));
                 }
-                RenameOrRecover => {
+                RenameOrRestore => {
                     let mgr = self.btrfs_mgr.borrow();
                     let groups = mgr.get_groups();
                     if let Some(index) = self.group_list_table_state.selected()
@@ -500,7 +500,7 @@ May caused by one of the following reasons:
                 vec![
                     (Create, "Create Group"),
                     (Delete, "Delete Group"),
-                    (RenameOrRecover, "Rename"),
+                    (RenameOrRestore, "Rename"),
                     (Confirm, "Select Group"),
                 ],
                 true,

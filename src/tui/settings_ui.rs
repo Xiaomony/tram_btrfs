@@ -134,8 +134,9 @@ impl SettingsUI {
         frame.render_stateful_widget(table, area, &mut self.settings_table_state);
     }
 
+    #[inline]
     fn get_instruction_paragraph() -> Paragraph<'static> {
-        Paragraph::new(r"")
+        Paragraph::new(include_str!("../instruction.txt"))
     }
 
     #[instrument]

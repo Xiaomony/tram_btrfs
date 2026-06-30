@@ -78,12 +78,12 @@ impl GroupSnapshot {
         Ok(())
     }
 
-    /// recover subvolumes from this snapshot
+    /// restore subvolumes from this snapshot
     #[instrument]
-    pub fn recover(&self) -> CResult<()> {
+    pub fn restore(&self) -> CResult<()> {
         let broken_snapshot_dir = utils::gen_broken_dir()?;
         for x in self.subvolume_snapshots.iter() {
-            x.recover(&broken_snapshot_dir)?;
+            x.restore(&broken_snapshot_dir)?;
         }
         Ok(())
     }

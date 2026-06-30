@@ -21,7 +21,7 @@ use crate::{
 enum BrokenSnapshotsFocus {
     BrokenSnapshotList,
     ConfirmingDeleting { index: usize, msg: String },
-    ConfirmingRecovering { index: usize, msg: String },
+    ConfirmingRestore { index: usize, msg: String },
 }
 
 #[derive(Debug)]
@@ -117,16 +117,14 @@ They may have related subvolumes or not.",
                     false,
                 )
             }
-            BrokenSnapshotsFocus::ConfirmingRecovering { ref msg, .. } => {
-                app_tui::show_confirm_popup(
-                    frame,
-                    frame.area(),
-                    "DANGER!! Recover from the following broken snapshot?",
-                    Paragraph::new(msg.as_str()),
-                    true,
-                    false,
-                )
-            }
+            BrokenSnapshotsFocus::ConfirmingRestore { ref msg, .. } => app_tui::show_confirm_popup(
+                frame,
+                frame.area(),
+                "DANGER!! Restore from the following broken snapshot?",
+                Paragraph::new(msg.as_str()),
+                true,
+                false,
+            ),
             _ => (),
         }
     }
@@ -144,10 +142,10 @@ They may have related subvolumes or not.",
                 No => self.focus = BrokenSnapshotsFocus::BrokenSnapshotList,
                 _ => (),
             },
-            BrokenSnapshotsFocus::ConfirmingRecovering { index, .. } => match event {
+            BrokenSnapshotsFocus::ConfirmingRestore { index, .. } => match event {
                 Yes => {
                     self.focus = BrokenSnapshotsFocus::BrokenSnapshotList;
-                    self.btrfs_mgr.borrow_mut().recover_broken_snapshot(index)?;
+                    self.btrfs_mgr.borrow_mut().restore_broken_snapshot(index)?;
                 }
                 No => self.focus = BrokenSnapshotsFocus::BrokenSnapshotList,
                 _ => (),
@@ -158,7 +156,7 @@ They may have related subvolumes or not.",
                 Top => self.broken_snapshot_table_state.select_first(),
                 Bottom => self.broken_snapshot_table_state.select_last(),
                 Left | WindowLeft | Escape => return Ok(true),
-                Delete | RenameOrRecover
+                Delete | RenameOrRestore
                     if let Some(i) = self.broken_snapshot_table_state.selected()
                         && !self.btrfs_mgr.borrow().get_broken_snapshots().is_empty() =>
                 {
@@ -175,7 +173,7 @@ They may have related subvolumes or not.",
                     if event == Delete {
                         self.focus = BrokenSnapshotsFocus::ConfirmingDeleting { index: i, msg };
                     } else if obj.has_related_subvol() {
-                        self.focus = BrokenSnapshotsFocus::ConfirmingRecovering { index: i, msg };
+                        self.focus = BrokenSnapshotsFocus::ConfirmingRestore { index: i, msg };
                     }
                 }
                 _ => (),
@@ -188,11 +186,11 @@ They may have related subvolumes or not.",
         use AppEvent::*;
         match self.focus {
             BrokenSnapshotsFocus::BrokenSnapshotList => (
-                vec![(Delete, "Delete Snapshot"), (RenameOrRecover, "Recover")],
+                vec![(Delete, "Delete Snapshot"), (RenameOrRestore, "Restore")],
                 true,
             ),
             BrokenSnapshotsFocus::ConfirmingDeleting { .. }
-            | BrokenSnapshotsFocus::ConfirmingRecovering { .. } => {
+            | BrokenSnapshotsFocus::ConfirmingRestore { .. } => {
                 (globals::YES_NO_PROMPTS.to_vec(), false)
             }
         }

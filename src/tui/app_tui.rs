@@ -49,7 +49,7 @@ pub enum AppEvent {
     Create,
     Delete,
     /// User ***pressed R***
-    RenameOrRecover,
+    RenameOrRestore,
     Escape,
     Confirm,
     Yes, // press `y` to confirm
@@ -82,7 +82,7 @@ impl AsRef<str> for AppEvent {
 
             Create => "a",
             Delete => "d / x",
-            RenameOrRecover => "r",
+            RenameOrRestore => "r",
 
             Escape => "Esc / Ctrl+[",
             Confirm => "Space / Enter",
@@ -268,7 +268,7 @@ impl AppTUI {
                 // operations
                 Char('a') => AppEvent::Create,
                 Char('d') | Char('x') => AppEvent::Delete,
-                Char('r') => AppEvent::RenameOrRecover,
+                Char('r') => AppEvent::RenameOrRestore,
                 Char(' ') | Enter => AppEvent::Confirm,
                 Char('y') | Char('Y') => AppEvent::Yes,
                 Char('n') | Char('N') => AppEvent::No,
@@ -321,13 +321,6 @@ impl AppTUI {
     }
 
     pub fn get_key_prompt(&self) -> Vec<(AppEvent, &str)> {
-        // (Create, "Create"),
-        // (Delete, "Delete"),
-        // (RenameOrRecover, "Rename / Recover"),
-        // (Escape, "Escape"),
-        // (Confirm, "Enter"),
-        // (Yes, "Yes"),
-        // (No, "No"),
         use AppEvent::*;
         let mut prompts = if self.is_inputing {
             vec![]
@@ -425,7 +418,7 @@ pub fn show_confirm_popup(
     larger_popup_window: bool,
 ) {
     let centered_area = if larger_popup_window {
-        area.centered(Constraint::Percentage(55), Constraint::Percentage(55))
+        area.centered(Constraint::Percentage(80), Constraint::Percentage(80))
     } else {
         area.centered(Constraint::Percentage(40), Constraint::Percentage(40))
     };

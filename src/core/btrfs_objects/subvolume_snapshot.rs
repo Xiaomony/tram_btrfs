@@ -19,11 +19,11 @@ impl SubvolumeSnapshot {
         }
     }
 
-    /// recover the subvolume from a snapshot
+    /// restore the subvolume from a snapshot
     /// and put the subvolume to the given `broken_snapshot_dir`
     /// return `false` if no subvolume related
     #[instrument]
-    pub fn recover(&self, broken_snapshot_dir: impl AsRef<Path> + std::fmt::Debug) -> CResult<()> {
+    pub fn restore(&self, broken_snapshot_dir: impl AsRef<Path> + std::fmt::Debug) -> CResult<()> {
         if let Some(ref subvol) = self.related_subvolume {
             // move the subvolume to the broken area
             let subvol_path = mount_point_join(subvol);
@@ -46,7 +46,7 @@ impl SubvolumeSnapshot {
             Ok(())
         } else {
             throw_bug(format!(
-                "No related subvolume when recovering from snapshot: {}",
+                "No related subvolume when restoring from snapshot: {}",
                 self.path.to_string_lossy()
             ))
         }

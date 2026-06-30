@@ -174,13 +174,13 @@ impl Group {
     }
 
     #[instrument]
-    pub fn recover(&mut self, index: usize) -> CResult<()> {
+    pub fn restore(&mut self, index: usize) -> CResult<()> {
         if !self.snapshots.is_empty()
             && let Some(x) = self.snapshots.get(index)
         {
-            x.recover()
+            x.restore()
         } else {
-            throw_invalid_index(index, "recovering snapshot to subvolume")
+            throw_invalid_index(index, "restoring snapshot to subvolume")
         }
     }
 

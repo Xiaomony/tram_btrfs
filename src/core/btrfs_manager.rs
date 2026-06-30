@@ -20,7 +20,7 @@ pub struct BtrfsManager {
     subvolumes: Vec<PathBuf>,
     app_config: AppConfig,
     device: String,
-    /// The application should take a snapshot before recover to a subvolume
+    /// The application should take a snapshot before restore to a subvolume
     /// and place it at tram_btrfs/broken/
     /// Also, snapshots should be store in this variable
     /// when fail to parse the path, determine the owner group, snapshot type or date and time
@@ -56,7 +56,7 @@ impl BtrfsManager {
         // create a directory to store snapshots under the mounted device
         create_dir_all(&*globals::SNAPSHOT_GROUP_DIR_PATH)?;
         // create a directory to store broken subvolumes
-        // (when recovering a snapshot to a subvolume, it will be regarded as a broken one)
+        // (when restoring a snapshot to a subvolume, it will be regarded as a broken one)
         create_dir_all(globals::TOP_DIR_PATH.join(globals::BROKEN_DIR_NAME))?;
         new_obj.get_subvolumes_and_snapshots()?;
 
@@ -171,7 +171,7 @@ impl BtrfsManager {
 
     /// 1. Reload and reparse the snapshots after renaming.
     ///    Otherwise the GroupSnapshots contain old snapshot pathes and will panick when deleting them.
-    /// 2. Reload and reparse the snapshots after recovering.
+    /// 2. Reload and reparse the snapshots after restoring.
     ///    Otherwise the broken snapshots won't show properly.
     pub fn reload_snapshots(&mut self) -> CResult<()> {
         self.subvolumes.clear();
@@ -268,13 +268,13 @@ impl BtrfsManager {
     }
 
     #[instrument]
-    pub fn recover_broken_snapshot(&mut self, index: usize) -> CResult<()> {
+    pub fn restore_broken_snapshot(&mut self, index: usize) -> CResult<()> {
         let Some(broken_snapshot) = self.broken_snapshots.get(index) else {
-            return throw_invalid_index(index, "recovering broken snapshot");
+            return throw_invalid_index(index, "restoring broken snapshot");
         };
 
         let broken_snapshot_dir = utils::gen_broken_dir()?;
-        broken_snapshot.recover(broken_snapshot_dir)?;
+        broken_snapshot.restore(broken_snapshot_dir)?;
         self.reload_snapshots()
     }
 
