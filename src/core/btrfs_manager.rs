@@ -273,11 +273,7 @@ impl BtrfsManager {
             return throw_invalid_index(index, "recovering broken snapshot");
         };
 
-        let (date, time) = utils::get_current_date_time();
-        let date_time = format!("{date}_{time}");
-        let broken_snapshot_dir = (*globals::BROKEN_SNAPSHOTS_DIR_PATH).join(date_time);
-        std::fs::create_dir_all(&broken_snapshot_dir)?;
-
+        let broken_snapshot_dir = utils::gen_broken_dir()?;
         broken_snapshot.recover(broken_snapshot_dir)?;
         self.reload_snapshots()
     }

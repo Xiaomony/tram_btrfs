@@ -110,3 +110,45 @@ pub fn get_current_date_time() -> (String, String) {
         .unwrap();
     (date, time)
 }
+
+/// create a directory: `/run/tram_btrfs/tram_btrfs/broken/{current_date}_{current_time}`
+/// and return its full path
+pub fn gen_broken_dir() -> CResult<PathBuf> {
+    let (date, time) = get_current_date_time();
+    let date_time = format!("{date}_{time}");
+    let broken_snapshot_dir = (*globals::BROKEN_SNAPSHOTS_DIR_PATH).join(date_time);
+    std::fs::create_dir_all(&broken_snapshot_dir)?;
+    Ok(broken_snapshot_dir)
+}
+
+#[inline]
+pub fn get_subvol_detail(subvol: impl AsRef<str>) -> String {
+    exec_command(
+        "btrfs",
+        ["subvolume", "show", "--human-readable", subvol.as_ref()],
+    )
+    .unwrap_or_else(|e| e.to_string())
+}
+
+pub fn expand_tabs(s: impl AsRef<str>, tab_width: usize) -> String {
+    let mut result = String::new();
+    let mut col = 0;
+    for c in s.as_ref().chars() {
+        match c {
+            '\t' => {
+                let spaces = tab_width - col % tab_width;
+                result.extend(std::iter::repeat_n(' ', spaces));
+                col += spaces;
+            }
+            '\n' => {
+                result.push('\n');
+                col = 0;
+            }
+            _ => {
+                result.push(c);
+                col += 1;
+            }
+        }
+    }
+    result
+}

@@ -1,22 +1,24 @@
 use color_eyre::Section;
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, HorizontalAlignment, Layout, Rect},
+    layout::{Alignment, Constraint, HorizontalAlignment, Layout, Margin, Rect},
     style::{Modifier, Style, Stylize},
     text::{Line, Text},
-    widgets::{Block, BorderType, Padding, Paragraph, Row, Table, TableState},
+    widgets::{
+        Block, BorderType, Borders, Clear, Padding, Paragraph, Row, Table, TableState, Wrap,
+    },
 };
 use std::{cell::RefCell, rc::Rc};
 use time::OffsetDateTime;
 use tracing::instrument;
 
-use crate::core::error::CResult;
-use crate::core::{btrfs_manager::BtrfsManager, btrfs_objects::snapshot_type::SnapshotType};
+use crate::core::{btrfs_manager::BtrfsManager, btrfs_objects::snapshot_type::SnapshotType, utils};
+use crate::core::{btrfs_objects::subvolume_snapshot::SubvolumeSnapshot, error::CResult};
 use crate::globals;
 use crate::tui::app_tui::{self, AppEvent, get_body_color, get_sel_group, get_sel_group_mut};
 use crate::tui::menu::Menu;
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 enum SnapshotUIFocus {
     ManualSnapshot,
     ScheduledSnapshot,
@@ -35,6 +37,19 @@ enum SnapshotUIFocus {
     /// show a warning when attempting to create snapshot while no subvolumes included
     NoSubvolWarning,
     CreateSnapshotsTooFastWarning,
+    SnapshotDetails {
+        contained_snapshot: Vec<SubvolumeSnapshot>,
+        table_state: TableState,
+        /// whether the focus is in manual snapshots table before showing snapshot details
+        prev_focus_manual: bool,
+    },
+}
+
+impl PartialEq for SnapshotUIFocus {
+    /// only compare enum variant, ignoring contained values
+    fn eq(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
 }
 
 impl SnapshotUIFocus {
@@ -233,6 +248,11 @@ and use an USB flash drive and recover via command line instead!!!
                     false,
                 );
             }
+            SnapshotUIFocus::SnapshotDetails {
+                ref contained_snapshot,
+                ref mut table_state,
+                ..
+            } => Self::render_snapshot_detail(frame, contained_snapshot, table_state, focused),
             _ => (),
         }
     }
@@ -346,6 +366,79 @@ and use an USB flash drive and recover via command line instead!!!
         };
     }
 
+    fn render_snapshot_detail(
+        frame: &mut Frame,
+        contained_snapshot: &[SubvolumeSnapshot],
+        table_state: &mut TableState,
+        focused: bool,
+    ) {
+        let area = frame
+            .area()
+            .centered(Constraint::Percentage(85), Constraint::Percentage(85));
+        frame.render_widget(Clear, area);
+        let color = app_tui::get_body_color(focused);
+        let block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .title("  Snapshot Details  ")
+            .title_alignment(Alignment::Center)
+            .style(color);
+
+        if contained_snapshot.is_empty() {
+            frame.render_widget(
+                Text::from("No Snapshots")
+                    .style(globals::WARNING_COLOR)
+                    .bold()
+                    .italic()
+                    .alignment(Alignment::Center),
+                block.inner(area),
+            );
+            frame.render_widget(block, area);
+        } else {
+            let [table_area, info_area] =
+                block
+                    .inner(area)
+                    .inner(Margin::new(1, 1))
+                    .layout(&Layout::vertical([
+                        Constraint::Length((contained_snapshot.len() + 3) as u16),
+                        Constraint::Fill(1),
+                    ]));
+            let rows: Vec<Row> = contained_snapshot
+                .iter()
+                .map(|x| {
+                    Row::new([
+                        x.get_path().to_string_lossy().to_string(),
+                        x.get_relate_subvolume_path().unwrap_or("").to_string(),
+                    ])
+                })
+                .collect();
+            let table = Table::new(
+                rows,
+                [Constraint::Percentage(70), Constraint::Percentage(30)],
+            )
+            .header(
+                Row::new(["Snapshot Path", "Related Subvolume"])
+                    .bold()
+                    .italic()
+                    .underlined(),
+            )
+            .row_highlight_style(Modifier::REVERSED)
+            .block(Block::new().borders(Borders::BOTTOM));
+
+            frame.render_widget(block, area);
+            frame.render_stateful_widget(table, table_area, table_state);
+            if let Some(i) = table_state.selected()
+                && let Some(subvol) = contained_snapshot.get(i)
+            {
+                let para = Paragraph::new(utils::expand_tabs(
+                    utils::get_subvol_detail(subvol.get_fullpath_string()),
+                    8,
+                ))
+                .wrap(Wrap { trim: false });
+                frame.render_widget(para, info_area);
+            }
+        }
+    }
+
     #[instrument]
     /// returns whether the focus should be returned to menu
     pub fn handle_events(&mut self, event: AppEvent) -> CResult<bool> {
@@ -406,6 +499,28 @@ and use an USB flash drive and recover via command line instead!!!
                         self.focus = SnapshotUIFocus::get_previous_focus(prev_focus_manual)
                     }
 
+                    _ => (),
+                }
+                return Ok(false);
+            }
+            SnapshotUIFocus::SnapshotDetails {
+                ref mut table_state,
+                prev_focus_manual,
+                ..
+            } => {
+                use AppEvent::*;
+                match event {
+                    Up => table_state.select_previous(),
+                    Down => table_state.select_next(),
+                    Top => table_state.select_first(),
+                    Bottom => table_state.select_last(),
+                    Escape | Enter => {
+                        self.focus = if prev_focus_manual {
+                            SnapshotUIFocus::ManualSnapshot
+                        } else {
+                            SnapshotUIFocus::ScheduledSnapshot
+                        }
+                    }
                     _ => (),
                 }
                 return Ok(false);
@@ -575,10 +690,37 @@ and use an USB flash drive and recover via command line instead!!!
 
                 _ => (),
             },
-            // TODO: here need implementation
             Enter => match self.focus {
-                SnapshotUIFocus::ManualSnapshot => todo!(),
-                SnapshotUIFocus::ScheduledSnapshot => todo!(),
+                SnapshotUIFocus::ManualSnapshot => {
+                    if !self.manual_snapshot_infos.is_empty()
+                        && let Some(i) = self.manual_snapshot_table_state.selected()
+                        && let Some((index, _, _, _)) = self.manual_snapshot_infos.get(i)
+                        && let Some(sel_group) =
+                            get_sel_group(&self.btrfs_mgr, &self.selected_group)
+                        && let Some(group_snapshot) = sel_group.get_snapshots().get(*index)
+                    {
+                        self.focus = SnapshotUIFocus::SnapshotDetails {
+                            contained_snapshot: group_snapshot.get_subvolume_snapshots().clone(),
+                            table_state: TableState::new().with_selected(Some(0)),
+                            prev_focus_manual: true,
+                        }
+                    }
+                }
+                SnapshotUIFocus::ScheduledSnapshot => {
+                    if !self.scheduled_snapshot_infos.is_empty()
+                        && let Some(i) = self.scheduled_snapshot_table_state.selected()
+                        && let Some((index, _, _, _, _)) = self.scheduled_snapshot_infos.get(i)
+                        && let Some(sel_group) =
+                            get_sel_group(&self.btrfs_mgr, &self.selected_group)
+                        && let Some(group_snapshot) = sel_group.get_snapshots().get(*index)
+                    {
+                        self.focus = SnapshotUIFocus::SnapshotDetails {
+                            contained_snapshot: group_snapshot.get_subvolume_snapshots().clone(),
+                            table_state: TableState::new().with_selected(Some(0)),
+                            prev_focus_manual: false,
+                        }
+                    }
+                }
                 _ => (),
             },
             _ => (),

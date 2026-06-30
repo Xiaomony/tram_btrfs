@@ -81,15 +81,10 @@ impl GroupSnapshot {
     /// recover subvolumes from this snapshot
     #[instrument]
     pub fn recover(&self) -> CResult<()> {
-        let (date, time) = utils::get_current_date_time();
-        let date_time = format!("{date}_{time}");
-        let broken_snapshot_dir = (*globals::BROKEN_SNAPSHOTS_DIR_PATH).join(date_time);
-        std::fs::create_dir_all(&broken_snapshot_dir)?;
-
+        let broken_snapshot_dir = utils::gen_broken_dir()?;
         for x in self.subvolume_snapshots.iter() {
             x.recover(&broken_snapshot_dir)?;
         }
-
         Ok(())
     }
 
@@ -106,6 +101,11 @@ impl GroupSnapshot {
     #[inline]
     pub fn get_time(&self) -> String {
         self.time.clone()
+    }
+
+    #[inline]
+    pub fn get_subvolume_snapshots(&self) -> &Vec<SubvolumeSnapshot> {
+        &self.subvolume_snapshots
     }
 
     #[inline]

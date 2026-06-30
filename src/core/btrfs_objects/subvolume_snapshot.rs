@@ -4,7 +4,7 @@ use crate::core::error::{CResult, throw_bug};
 use crate::core::utils::{exec_command, mount_point_join};
 use std::path::{Path, PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Snapshots of a single subvolume
 pub struct SubvolumeSnapshot {
     path: PathBuf,
