@@ -3,6 +3,22 @@ name = "tram_btrfs"
 version = "1.0.1"
 edition = "2024"
 
+description = "A TUI Btrfs snapshot manager"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/Xiaomony/tram_btrfs"
+homepage = "https://github.com/Xiaomony/tram_btrfs"
+readme = "Readme.md"
+
+keywords = [
+    "btrfs",
+    "snapshot",
+    "tui"
+]
+
+categories = [
+    "command-line-utilities"
+]
+
 [dependencies]
 clap = { version = "4.6.1", features = ["derive"] }
 clap_complete = "4.6.6"
