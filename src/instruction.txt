@@ -4,7 +4,7 @@
 
     When restoring from a snapshot, the replaced subvolumes will be considered as a "broken snapshot" and placed at "Broken Snapshots" window. But never restore any snapshots containing a whole Linux system in this way. Use a USB flash drive and restore via command line instead!
 
-    The program will create a file at "~/.config/tram_btrfs/tram.toml" to store your configurations and settings. Also, it needs root permission to execute btrfs operations. Therefore, it's recommended to execute the program with "sudo -E tram_btrfs" to keep your environment variables so that the config file won't locate under "/root/.config/".
+    The program stores its configuration in `~/.config/tram_btrfs/tram.toml`. Since it requires root privileges to perform Btrfs operations, the configuration file will be stored in `/root/.config/tram_btrfs/` when the program is run with `sudo`.
 
     The program can automatically create "scheduled" snapshots(daily, weekly, monthly, boot). In "Settings" section, you can set the maximum count of each type of scheduled snapshots. It will check the schedule every time you run it(except "boot" snapshot).
 
