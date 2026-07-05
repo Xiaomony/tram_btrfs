@@ -73,9 +73,11 @@ impl BtrfsManager {
     #[instrument]
     fn create_file_lock() -> CResult<Flock<std::fs::File>> {
         let file = std::fs::File::create(globals::FILE_LOCK)?;
-        match Flock::lock(file, FlockArg::LockSharedNonblock) {
+        match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
             Ok(lock) => Ok(lock),
-            Err((_, error)) => Err(error.into()),
+            Err((_, error)) => Err(error)
+                .warning("Fail to create file lock.")
+                .suggestion("Another Tram TUI instance is running, please close it!"),
         }
     }
 

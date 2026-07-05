@@ -1804,7 +1804,7 @@ dependencies = [
 
 [[package]]
 name = "tram_btrfs"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "clap",
  "clap_complete",
