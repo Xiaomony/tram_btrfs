@@ -29,6 +29,6 @@ fn main() -> CResult<()> {
     if debug_mode {
         result
     } else {
-        result.wrap_err(">>> If you intend to report this as a bug, please reproduce the bug by 'DEBUG=1 sudo -E tram' and collect output. <<<").wrap_err("=== Skip this error chain and read sections below first! ===")
+        result.wrap_err(">>> If you intend to report this as a bug, please reproduce the bug by 'DEBUG=1 sudo tram' and collect output. <<<").wrap_err("=== Skip this error chain and read sections below first! ===")
     }
 }
